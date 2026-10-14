@@ -52,10 +52,11 @@ A **Fase 11 — Refinamento** cumpriu integralmente o escopo definido no `ROADMA
 
 5. **Auditoria de Segurança, QA e Rollout Supervisionado:**
    - **Auditoria `Sentinela` (`docs/PHASE11-SECURITY-REVIEW.md`):** **APROVADO / SEGURO** em todas as frentes (SQL/grants, RBAC de templates e isolamento anti-IDOR em relatórios).
-   - **QA e Integração Real (`docs/PHASE11-QA-RESULT.md`):** **13/13 testes PASS** em `tests/phase11/templates-reports.integration.test.ts` no banco real `orium_test` (`5433`) com limpeza cirúrgica, mais **60/60 testes PASS** na regressão da Fase 10 (`73/73` total).
-   - **Rollout em DEV e Produção VPS (`docs/PHASE11-ROLLOUT-RESULT.md`):**
-     - Release oficial `release-20261014145429-d26ab5bcc28f` (`64` arquivos, `targetSchemaVersion: "0006_refinement_templates_reports.sql"`).
+   - **QA, Integração Real e Bateria Global (`docs/PHASE11-QA-RESULT.md`):** **13/13 testes PASS** em `tests/phase11/templates-reports.integration.test.ts`, **60/60 testes PASS** na regressão da Fase 10, e **21/21 suítes globais aprovadas (366/366 testes PASS, 0 falhas, 0 skips)** cobrindo todas as fases do repositório (Fases 1 a 11) no banco isolado `orium_test` (`5433`) com limpeza cirúrgica e zero resíduos.
+   - **Rollout em DEV + Produção VPS e Templates Canônicos (`docs/PHASE11-ROLLOUT-RESULT.md`):**
+     - Release oficial `release-20261014152334-c8746b3a893b` (`64` arquivos, `targetSchemaVersion: "0006_refinement_templates_reports.sql"`).
      - Migração `0006` aplicada em `orium_dev` (`55432`) e `orium_prod` (`orium-vps`) com snapshots preventivos verificados via `pg_restore --list`.
+     - **3 Templates Operacionais Canônicos da Orium** semeados de forma idempotente em `orium_dev` e `orium_prod` (`Criação de Landing Page`, `Identidade Visual Completa` e `Produção de Vídeo / Reels Institucional` — 9 tarefas encadeadas, 5 requisitos obrigatórios e 6 dependências).
      - Containers `web` e `api` reconstruídos na VPS (`https://app.oriumdigital.tech` respondendo `200 OK` com 5/5 security headers e novas rotas protegidas por `401 UNAUTHENTICATED`).
 
 ---

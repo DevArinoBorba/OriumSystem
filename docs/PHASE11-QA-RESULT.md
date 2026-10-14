@@ -166,3 +166,59 @@ Executadas via `.local/phase11/run-phase11-live-probe.mjs` contra os endpoints d
   - **0 erros, 0 avisos** em todos os diretórios do monorepo e frentes de teste.
 - **Evidências Duráveis:** [`.local/phase11/phase11-post-rollout-verification.json`](file:///C:/Users/arino/OneDrive/Documentos/Projetos/OriumSystem/.local/phase11/phase11-post-rollout-verification.json).
 
+## 7. Bateria Global Completa do Repositório (Fases 1 a 11 — 21 Suítes)
+
+Em conformidade com a determinação do responsável (*"feito todos os testes pode subir para a vps"*), foi executada a bateria de testes integral cobrindo todas as fases do projeto (Fases 1 a 11) contra o banco de teste isolado `orium_test` (porta `5433`).
+
+### 7.1. Execução Consolidada
+
+- **Comando Executado:**
+  ```powershell
+  node --env-file=.env node_modules/vitest/vitest.mjs run --fileParallelism=false
+  ```
+- **Arquivos de Teste Executados:** **21/21 aprovados (100% PASS)**
+- **Total de Testes Aprovados:** **366/366 aprovados (100% PASS)**
+- **Falhas / Skips:** **0 falhas, 0 pendências, 0 skips** (`exit code 0`)
+- **Duração:** 251.55s
+
+### 7.2. Discriminação das 21 Suítes de Teste
+
+| # | Arquivo de Teste | Fase / Escopo | Testes Aprovados |
+|---|---|---|---|
+| 1 | `tests/identity-audit.integration.test.ts` | Trilha de auditoria e conformidade de identidade | 18 |
+| 2 | `tests/demands-authorization.integration.test.ts` | Autorização transacional de demandas e tarefas | 4 |
+| 3 | `tests/recovery.integration.test.ts` | Recuperação atômica de credenciais de acesso | 16 |
+| 4 | `tests/notifications.integration.test.ts` | Central de notificações, privacidade e paginação | 25 |
+| 5 | `tests/dashboard.integration.test.ts` | Painel operacional, métricas e RBAC | 24 |
+| 6 | `tests/auth.integration.test.ts` | Autenticação central, sessões HttpOnly e RBAC | 17 |
+| 7 | `tests/demands.integration.test.ts` | Domínio de demandas, tarefas e prevenção de IDOR | 52 |
+| 8 | `tests/clients-authorization.integration.test.ts` | Autorização transacional de clientes | 9 |
+| 9 | `tests/materials.integration.test.ts` | Domínio de materiais, anexos e linha do tempo | 36 |
+| 10 | `tests/notifications-generation.integration.test.ts` | Geração reativa de notificações de tarefas | 7 |
+| 11 | `tests/clients.integration.test.ts` | CRUD e concorrência otimista de clientes | 10 |
+| 12 | `tests/phase11/templates-reports.integration.test.ts` | Fase 11: Templates de demandas e relatórios operacionais | 13 |
+| 13 | `tests/notifications-calendar.integration.test.ts` | Notificações de calendário e entregas | 4 |
+| 14 | `tests/security-http.test.ts` | Cabeçalhos e sanitização de segurança HTTP | 8 |
+| 15 | `tests/phase10/backup-restore-isolated.test.ts` | Fase 10: Backup e restore atômico com integridade | 15 |
+| 16 | `tests/phase10/manifest-verification.test.ts` | Fase 10: Verificação de integridade de manifesto de release | 7 |
+| 17 | `tests/phase10/production-hardening.test.ts` | Fase 10: Hardening de configuração de produção e Nginx | 14 |
+| 18 | `tests/phase10/health-probe-freshness.test.ts` | Fase 10: Sondas HTTPS e frescor de backup | 19 |
+| 19 | `tests/phase10/preflight-negative.test.ts` | Fase 10: Gates pré-deploy negativos e validação estrita | 5 |
+| 20 | `tests/rbac.test.ts` | Verificação de matriz de papéis e permissões | 50 |
+| 21 | `tests/config.test.ts` | Validação de topologia de ambiente e segredos | 13 |
+| **Total** | **21 arquivos** | **Todas as Fases (1 a 11)** | **366 testes (100% PASS)** |
+
+### 7.3. Higiene Pós-Execução do Banco de Teste (`orium_test`)
+
+Após o término da bateria global de testes, foi verificado o estado das tabelas e privilégios no banco isolado `orium_test` (`127.0.0.1:5433`):
+- **Resíduos de Dados:**
+  - `auth_user`: 0 linhas remanescentes
+  - `demand`: 0 linhas remanescentes
+  - `task`: 0 linhas remanescentes
+  - `notification`: 0 linhas remanescentes
+  - Zero resíduos órfãos em todas as tabelas transacionais de teste.
+- **Privilégios e Integridade Estrutural:**
+  - Todas as 24 tabelas canônicas (incluindo as 4 tabelas introduzidas na migração `0006_refinement_templates_reports.sql`) mantêm intactos seus 84 privilégios de aplicação para a role `orium_app`.
+  - Nenhuma tabela de desenvolvimento local (`orium_dev` na porta `55432`) ou de produção na VPS foi tocada durante a execução.
+
+

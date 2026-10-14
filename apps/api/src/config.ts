@@ -32,10 +32,27 @@ const configSchema = z.object({
     ) {
       ctx.addIssue({ code: 'custom', path: ['NODE_ENV'], message: 'Topologia de produção inválida.' });
     }
-  } else if (value.API_HOST === '0.0.0.0' || !['127.0.0.1', 'localhost', '[::1]'].includes(new URL(value.API_ORIGIN).hostname)
-      || !['127.0.0.1', 'localhost', '[::1]'].includes(new URL(value.WEB_ORIGIN).hostname)
-      || !['127.0.0.1', 'localhost', '[::1]'].includes(new URL(value.DATABASE_URL).hostname)) {
-    ctx.addIssue({ code: 'custom', path: ['NODE_ENV'], message: 'Topologia local inválida.' });
+  } else {
+    let hasLocalTopologyIssue = false;
+    if (value.API_HOST === '0.0.0.0') {
+      hasLocalTopologyIssue = true;
+      ctx.addIssue({ code: 'custom', path: ['API_HOST'], message: 'Topologia local inválida.' });
+    }
+    if (!['127.0.0.1', 'localhost', '[::1]'].includes(new URL(value.API_ORIGIN).hostname)) {
+      hasLocalTopologyIssue = true;
+      ctx.addIssue({ code: 'custom', path: ['API_ORIGIN'], message: 'Topologia local inválida.' });
+    }
+    if (!['127.0.0.1', 'localhost', '[::1]'].includes(new URL(value.WEB_ORIGIN).hostname)) {
+      hasLocalTopologyIssue = true;
+      ctx.addIssue({ code: 'custom', path: ['WEB_ORIGIN'], message: 'Topologia local inválida.' });
+    }
+    if (!['127.0.0.1', 'localhost', '[::1]'].includes(new URL(value.DATABASE_URL).hostname)) {
+      hasLocalTopologyIssue = true;
+      ctx.addIssue({ code: 'custom', path: ['DATABASE_URL'], message: 'Topologia local inválida.' });
+    }
+    if (hasLocalTopologyIssue) {
+      ctx.addIssue({ code: 'custom', path: ['NODE_ENV'], message: 'Topologia local inválida.' });
+    }
   }
 });
 export type Config = z.infer<typeof configSchema>;

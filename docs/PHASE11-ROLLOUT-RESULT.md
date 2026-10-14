@@ -12,10 +12,10 @@
 
 O pipeline fail-closed de empacotamento oficial foi executado na raiz do monorepo, gerando o release canônico da Fase 11:
 - **Comando:** `node deploy/operations/run-pipeline.mjs production`
-- **ID do Release:** `release-20261014145429-d26ab5bcc28f`
+- **ID do Release:** `release-20261014152334-c8746b3a893b`
 - **Total de Arquivos:** 64 arquivos canônicos
 - **Target Schema Version:** `0006_refinement_templates_reports.sql`
-- **Bundle Gerado:** `deploy/operations/releases/release-20261014145429-d26ab5bcc28f/bundle.tar.gz` (172.557 bytes)
+- **Bundle Gerado:** `deploy/operations/releases/release-20261014152334-c8746b3a893b/bundle.tar.gz` (172.618 bytes)
 - **Gates:**
   - `MANIFEST_GENERATION`: **OK** (exit 0)
   - `PREFLIGHT`: **OK** (exit 0, integridade e ausência de segredos validadas)
@@ -65,7 +65,7 @@ O pipeline fail-closed de empacotamento oficial foi executado na raiz do monorep
   - `packages/contracts/src/index.ts`
   - `db/migrations/0006_refinement_templates_reports.sql`
   - `db/migrations/meta/_journal.json`
-  - `apps/api/src/{schema.ts,migrate.ts,templates.ts,reports.ts,app.ts}`
+  - `apps/api/src/{schema.ts,migrate.ts,templates.ts,reports.ts,app.ts,config.ts}`
   - `apps/web/src/{types.ts,api.ts,App.tsx,styles.css}`
   - `apps/web/src/components/{Header.tsx,DemandsView.tsx,ReportsView.tsx,UseTemplateModal.tsx,ManageTemplatesModal.tsx}`
 - Line endings convertidos estritamente para LF (`sed -i 's/\r$//'`).
@@ -109,3 +109,43 @@ O pipeline fail-closed de empacotamento oficial foi executado na raiz do monorep
 1. **Proteção de Segredos:** Zero senhas, chaves privadas ou tokens expostos em terminais, logs ou documentação.
 2. **Isolamento de Processos:** Nenhum serviço externo ou processo de outro projeto na máquina ou na VPS foi interrompido.
 3. **Resiliência:** Backups pré-migração íntegros e verificados tanto em DEV (`.local/phase11/backups/`) quanto na VPS (`/var/lib/orium-backup/staging/`).
+
+---
+
+## 5. Semeio dos Templates Canônicos da Agência (`demand_template`)
+
+Em cumprimento à diretriz da coordenação, foram inseridos de forma transacional e idempotente (`.local/phase11/seed-canonical-templates.sql`) os 3 templates operacionais canônicos da Orium, disponíveis imediatamente no botão `"Usar template"` tanto em `orium_dev` quanto em `orium_prod`:
+
+1. **Criação de Landing Page (`category: 'web'`, `default_priority: 'high'`, `estimated_days: 10`):**
+   - **Tarefa 1:** `Wireframe e Copywriting da Página` (offset 0d, duração 3d, prioridade alta, papel colaborador) — Requisito obrigatório: `Briefing e oferta validados com o cliente`.
+   - **Tarefa 2:** `Design UI no Figma (Desktop e Mobile)` (offset 3d, duração 4d, prioridade alta, papel colaborador) — Depende da Tarefa 1; Requisito obrigatório: `Identidade visual e ativos da marca anexados`.
+   - **Tarefa 3:** `Implementação, Publicação e Revisão Final` (offset 7d, duração 3d, prioridade urgente, papel colaborador) — Depende da Tarefa 2; Requisito obrigatório: `Domínio e DNS configurados`.
+
+2. **Identidade Visual Completa (`category: 'design'`, `default_priority: 'normal'`, `estimated_days: 12`):**
+   - **Tarefa 1:** `Pesquisa de Referências e Moodboard` (offset 0d, duração 3d, prioridade normal, papel colaborador) — Requisito obrigatório: `Questionário de posicionamento preenchido`.
+   - **Tarefa 2:** `Criação de Logotipo e Paleta Tipográfica/Cromática` (offset 3d, duração 5d, prioridade alta, papel colaborador) — Depende da Tarefa 1.
+   - **Tarefa 3:** `Manual da Marca e Fechamento de Arquivos` (offset 8d, duração 4d, prioridade normal, papel colaborador) — Depende da Tarefa 2.
+
+3. **Produção de Vídeo / Reels Institucional (`category: 'video'`, `default_priority: 'normal'`, `estimated_days: 7`):**
+   - **Tarefa 1:** `Roteiro e Decupagem de Cenas` (offset 0d, duração 2d, prioridade normal, papel colaborador) — Requisito obrigatório: `Brutos de vídeo e locução disponíveis no Drive`.
+   - **Tarefa 2:** `Edição, Motion Graphics e Color Grading` (offset 2d, duração 3d, prioridade alta, papel colaborador) — Depende da Tarefa 1.
+   - **Tarefa 3:** `Finalização e Exportação Multiformato` (offset 5d, duração 2d, prioridade normal, papel colaborador) — Depende da Tarefa 2.
+
+**Total cadastrado:** 3 templates, 9 tarefas encadeadas, 5 requisitos obrigatórios e 6 dependências direcionadas validadas em `orium_dev` e `orium_prod`.
+
+---
+
+## 6. Consolidação Final do Estado da VPS (`orium-vps`)
+
+- **Containers de Produção:**
+  - `orium-production-web-1`: `Up (8080/tcp, 80/tcp)`
+  - `orium-production-api-1`: `Up (healthy, 3001/tcp)`
+  - `orium-production-postgres-1`: `Up 4+ hours (healthy, 5432/tcp)` — uptime ininterrupto preservado.
+- **Permissões do Sistema de Arquivos em `/data/orium/production/`:**
+  - Arquivos de segredos/compose: `-rw------- (600)` `root:root` (`.env` e `docker-compose.yaml`).
+  - Código fonte, contratos, migrações e assets: `-rw-r--r-- (644)` `root:root`.
+  - Diretórios: `drwxr-xr-x (755)` `root:root`.
+- **Rotina de Backup Automatizado:**
+  - `systemctl status orium-backup.timer`: `active (waiting)` configurado para execução diária às `03:00 America/Cuiaba` (`07:00 UTC`).
+  - `freshness.sh check`: **`freshness: ok`** (verificação de snapshot com integridade validada).
+

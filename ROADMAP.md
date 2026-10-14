@@ -110,8 +110,8 @@ Status: [x] CONCLUÍDA — 14/10/2026 (`docs/PHASE11-CLOSURE.md`).
 - [x] Migração `0006_refinement_templates_reports.sql` (6 índices compostos/parciais de performance, 4 tabelas `demand_template*` e grants mínimos para `orium_app`) + Backend de Templates (`/api/v1/demand-templates` com instanciação atômica e emissão de notificações `task_assigned`) e Relatórios Operacionais (`/api/v1/reports/productivity` e `/api/v1/reports/bottlenecks` sob `READ COMMITTED READ ONLY` com isolamento anti-IDOR) (`docs/PHASE11-BACKEND-RESULT.md`).
 - [x] Auditoria de segurança e SQL best-practices aprovada pelo Sentinela (`docs/PHASE11-SECURITY-REVIEW.md`).
 - [x] Frontend de Relatórios Operacionais (`ReportsView.tsx`) e Templates de Demandas (`UseTemplateModal.tsx`, `ManageTemplatesModal.tsx`, `DemandsView.tsx`) validado com `eslint`, `typecheck` e `build` (`docs/PHASE11-FRONTEND-RESULT.md`).
-- [x] Suíte de integração real em `orium_test` (`13/13 PASS` em `tests/phase11/templates-reports.integration.test.ts` + `60/60 PASS` regressão Fase 10, `docs/PHASE11-QA-RESULT.md`).
-- [x] Rollout supervisionado em DEV (`orium_dev` `55432`) e Produção VPS (`orium-vps`, release `release-20261014145429-d26ab5bcc28f`, 64 arquivos) com snapshots preventivos verificados e smoke tests HTTPS `200`/`401` (`docs/PHASE11-ROLLOUT-RESULT.md`).
+- [x] Suíte de integração real em `orium_test` (`13/13 PASS` em `tests/phase11/templates-reports.integration.test.ts`, `60/60 PASS` Fase 10 e **bateria global completa 21/21 suítes = 366/366 testes PASS**, `docs/PHASE11-QA-RESULT.md`).
+- [x] Rollout supervisionado em DEV (`orium_dev` `55432`) e Produção VPS (`orium-vps`, release `release-20261014152334-c8746b3a893b`, 64 arquivos) com snapshots preventivos verificados, 3 templates canônicos da Orium semeados (`Criação de Landing Page`, `Identidade Visual Completa`, `Produção de Vídeo / Reels Institucional`) e smoke tests HTTPS `200`/`401` (`docs/PHASE11-ROLLOUT-RESULT.md`).
 Analisar gargalos, revisar UX, templates de demandas, automações, relatórios, integrações e performance.
 
 # Regra de execução para Maestro/Codex
