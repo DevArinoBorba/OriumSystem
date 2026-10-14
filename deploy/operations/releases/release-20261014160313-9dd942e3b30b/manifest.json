@@ -1,0 +1,352 @@
+{
+  "manifestVersion": "1.0",
+  "releaseId": "release-20261014160313-9dd942e3b30b",
+  "version": "0.1.0",
+  "gitCommit": "54a6f018cce80f9b451df9fe63e0fe93b0437885",
+  "sourceTreeSHA256": "9dd942e3b30b45beaec846cea0c42a9f3e9776bdcb9376c42717d1f908cb7cfe",
+  "createdAt": "2026-10-14T16:03:13.390Z",
+  "targetEnvironment": "production",
+  "appImage": "orium-production",
+  "targetSchemaVersion": "0006_refinement_templates_reports.sql",
+  "rollbackPolicy": {
+    "schemaDowngradeAllowed": false,
+    "keepBackups": true
+  },
+  "files": [
+    {
+      "path": "apps/api/package.json",
+      "sha256": "53df41d455462c7859f4a70ce6a90eb2fedd5ad9a6f142e73cdf3b4b8bdb9093",
+      "sizeBytes": 491
+    },
+    {
+      "path": "apps/api/src/app.ts",
+      "sha256": "6ead9f690b9850edaaf187ab012a9a6f0bddee14be0d5d4aa413d76f222f0c4f",
+      "sizeBytes": 28963
+    },
+    {
+      "path": "apps/api/src/auth.ts",
+      "sha256": "ab6a409a6345effbaf44b86109e5f2162afbdd6437d327d1dea248a521a9511f",
+      "sizeBytes": 1597
+    },
+    {
+      "path": "apps/api/src/cli.ts",
+      "sha256": "87e100e5ec5afebd6b315c3bd6099d0cabc88a2b78a932d847f2bb67cb14d776",
+      "sizeBytes": 8615
+    },
+    {
+      "path": "apps/api/src/clients.ts",
+      "sha256": "81bba765310ee21d1e6d5f246b08010bd7e5a10fce7ff6e871ae523e0af5210f",
+      "sizeBytes": 10231
+    },
+    {
+      "path": "apps/api/src/config.ts",
+      "sha256": "e9469511db7ff91b742ebc1d9aee89903da7b3ee85f9798bcb3db9ba548a76ac",
+      "sizeBytes": 3221
+    },
+    {
+      "path": "apps/api/src/dashboard.ts",
+      "sha256": "98ebf62554e7f0cb715843a139cb0c888f22cec53da3261e184ee8db75da6d75",
+      "sizeBytes": 13602
+    },
+    {
+      "path": "apps/api/src/db.ts",
+      "sha256": "8eafdb8ac21ba0e6a8f75eb245e26b6008dead338a141c9ed23c103670302712",
+      "sizeBytes": 1519
+    },
+    {
+      "path": "apps/api/src/demands.ts",
+      "sha256": "aaae3a0f1c093463ce4e5eb4d46fc89232811bd1a4e11d001cc1819bbf4c4d8c",
+      "sizeBytes": 57688
+    },
+    {
+      "path": "apps/api/src/errors.ts",
+      "sha256": "03f3a200e65630de806ec152afc8decdaebd88aee92431fef0858641f64e1731",
+      "sizeBytes": 139
+    },
+    {
+      "path": "apps/api/src/identity-audit.ts",
+      "sha256": "34e86d7b2521c70468fd3d58a7e7b1343a8c837116b5530ea3aa9afea9054903",
+      "sizeBytes": 10756
+    },
+    {
+      "path": "apps/api/src/identity.ts",
+      "sha256": "57c4be2e0f024204dd319cab35653869b1e2ff948441282902ef1996e32ad8c3",
+      "sizeBytes": 11803
+    },
+    {
+      "path": "apps/api/src/materials.ts",
+      "sha256": "57b6e51580446c23207c49a1ed5110f934fa92ce9ee2cc42656b9cfeed0fd862",
+      "sizeBytes": 36939
+    },
+    {
+      "path": "apps/api/src/migrate.ts",
+      "sha256": "91935a4b58cfee52cffb024c13d5f9bb58f4b499e619b2ed4d84d8a1d645e9be",
+      "sizeBytes": 2610
+    },
+    {
+      "path": "apps/api/src/notifications-calendar.ts",
+      "sha256": "1cafe06306021f6a96dda0fad2349911464ef7e9d841b94d1c061e80bc65b522",
+      "sizeBytes": 3861
+    },
+    {
+      "path": "apps/api/src/notifications-producer.ts",
+      "sha256": "dea35b162ca44746b234c2cf41d05db5787d3b1b6b8edeac5b58e96f660d0927",
+      "sizeBytes": 5203
+    },
+    {
+      "path": "apps/api/src/notifications.ts",
+      "sha256": "cc693d5731e1edfbfa617924d621e70b9eed3d3a284a28468aea6c44e8a40771",
+      "sizeBytes": 13706
+    },
+    {
+      "path": "apps/api/src/recovery.ts",
+      "sha256": "909b82cbb368262a2bf3575e4f08abbad1d2dbfeab2d670d9e8269a8999763cc",
+      "sizeBytes": 6101
+    },
+    {
+      "path": "apps/api/src/reports.ts",
+      "sha256": "48aaa4426e25e4615d86691ec2d8467b58685b2999eaf911f1a1386badcd07bb",
+      "sizeBytes": 11660
+    },
+    {
+      "path": "apps/api/src/schema.ts",
+      "sha256": "387f85bb656f0d43a366f71a34db8cabebeb40b22e86ad1f8affbb9510658cb1",
+      "sizeBytes": 15852
+    },
+    {
+      "path": "apps/api/src/server.ts",
+      "sha256": "36d9f8b43ce31c983597b7ce6fef0577eeed3b3afa97a35da2b010a65d5cb0b7",
+      "sizeBytes": 1042
+    },
+    {
+      "path": "apps/api/src/templates.ts",
+      "sha256": "fc2e3072d9be691d0cd87b47aeeed6bdead89be3293d8c8de6d7d87857de54c9",
+      "sizeBytes": 26811
+    },
+    {
+      "path": "apps/api/tsconfig.json",
+      "sha256": "7d6d15c5e0e3fb7e4f3b67420b1e9d04c30b1d3e23897a7f48f1287c4216a00d",
+      "sizeBytes": 181
+    },
+    {
+      "path": "apps/web/index.html",
+      "sha256": "dda379a0afe9fe1883559a04bb33755ef6c28df09db93420348344d2d1fb2231",
+      "sizeBytes": 1066
+    },
+    {
+      "path": "apps/web/package.json",
+      "sha256": "54f855e4889fda598099abddaa59f50b8cb0132754b8af5e7d2df9174d0bb0e5",
+      "sizeBytes": 540
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "sha256": "846bcbe1500cc293dd0392c624fca4a212ec32dc2159e95a41abfd83aaeab18a",
+      "sizeBytes": 10304
+    },
+    {
+      "path": "apps/web/src/api.ts",
+      "sha256": "772a95d9cc9bbb294fbce0170fdd9e61e254a8374132477a9165a79e638aec32",
+      "sizeBytes": 26712
+    },
+    {
+      "path": "apps/web/src/assets/logo-horizontal-light-theme.png",
+      "sha256": "053414317d05549d77998c9ef8d431a483288efe8e839d332c177e83bccc5032",
+      "sizeBytes": 52328
+    },
+    {
+      "path": "apps/web/src/assets/logo-horizontal.png",
+      "sha256": "e2ff2d8a579125380a25d0f52043e755ef68dbda1829349a590b80d18fbde80c",
+      "sizeBytes": 67852
+    },
+    {
+      "path": "apps/web/src/components/ClientsView.tsx",
+      "sha256": "59e0681da553301f9fb7bfb1a6eb886985caa7755bfd0f9d6d1a96a38ecf3879",
+      "sizeBytes": 29931
+    },
+    {
+      "path": "apps/web/src/components/DashboardView.tsx",
+      "sha256": "c338b65457c0e6412be3bf356ee65b87be665425e640d951db210409d2b5948f",
+      "sizeBytes": 12805
+    },
+    {
+      "path": "apps/web/src/components/DemandsView.tsx",
+      "sha256": "538c92bb494f582e5a87f58ce60e723cbbeb8697d30fa1c1946f1bb851ffd9de",
+      "sizeBytes": 71122
+    },
+    {
+      "path": "apps/web/src/components/Header.tsx",
+      "sha256": "e490fc53d64c60c1ed0124d4d9c396ce0fe284a4a02839aabc06778f414c5e84",
+      "sizeBytes": 6980
+    },
+    {
+      "path": "apps/web/src/components/LoginView.tsx",
+      "sha256": "196f2bd406dd75f95e4c6dcf238257eb60167d22eee6357fe51bf03b55c8b855",
+      "sizeBytes": 6136
+    },
+    {
+      "path": "apps/web/src/components/ManageTemplatesModal.tsx",
+      "sha256": "c49265156b0381d1b793da11466c201a3ba77dab0ea93b2644c3997ea7e31b17",
+      "sizeBytes": 24599
+    },
+    {
+      "path": "apps/web/src/components/MaterialsView.tsx",
+      "sha256": "f547ed2a80b19873cdcea479cb4877355b6ce05262f27c0eb53bb8cde528e622",
+      "sizeBytes": 84829
+    },
+    {
+      "path": "apps/web/src/components/NotificationsView.tsx",
+      "sha256": "f496d73c530eec9e687e7ea2c19cbde2c93184a7e5b395fcc5ec380b6b310683",
+      "sizeBytes": 14948
+    },
+    {
+      "path": "apps/web/src/components/PasswordVisibilityButton.tsx",
+      "sha256": "5c0feb0463d5bc62e5a88fab80a3d8ba14fe06db056c3f3f6b43c24ac08b1c5b",
+      "sizeBytes": 1202
+    },
+    {
+      "path": "apps/web/src/components/ReportsView.tsx",
+      "sha256": "012b288a6663697033a51525c8f66543c7dd5a10971cd4c97f25ce4fa824c9d9",
+      "sizeBytes": 15645
+    },
+    {
+      "path": "apps/web/src/components/TaskDetailView.tsx",
+      "sha256": "f4686932c301647113eee1d9227f7f80fb1822ea18af579e8582053ed7f99a69",
+      "sizeBytes": 42394
+    },
+    {
+      "path": "apps/web/src/components/TeamView.tsx",
+      "sha256": "0f58ca033f91497a2923f0681c8e393ce3adcf3c25653f0d3135a35f35302ce2",
+      "sizeBytes": 22325
+    },
+    {
+      "path": "apps/web/src/components/UseTemplateModal.tsx",
+      "sha256": "289456c7a1ce6a3431129747fcc2e19dccd8c66e70fcdcc2e158c1833c5a8f35",
+      "sizeBytes": 17619
+    },
+    {
+      "path": "apps/web/src/main.tsx",
+      "sha256": "133eece57f971489a5e253530e20361a5bd0b043cde7d1e381fbe84368a7a0ac",
+      "sizeBytes": 239
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "sha256": "ab3dfcad185b1ea84752f47b98ef921ec8a08b67b006c94f5602537a63e92920",
+      "sizeBytes": 53173
+    },
+    {
+      "path": "apps/web/src/theme.ts",
+      "sha256": "7a532b8de11e5538e1a7f41ce08790c6f506f518bd8f92f10e6d45cbf0fd5987",
+      "sizeBytes": 2067
+    },
+    {
+      "path": "apps/web/src/types.ts",
+      "sha256": "64606dd2bce8f71e5162af873b4519e1208f24a8f7a832beae50ef2d4b1ff1eb",
+      "sizeBytes": 3859
+    },
+    {
+      "path": "apps/web/src/vite-env.d.ts",
+      "sha256": "ba881d160fc0ef081b7d683b7646ab365791bc30db8069254363462340a40920",
+      "sizeBytes": 109
+    },
+    {
+      "path": "apps/web/tsconfig.json",
+      "sha256": "58219949406859262c01333819ffd7fd2672a6c8c3b32dc99f88e5713cd041d0",
+      "sizeBytes": 262
+    },
+    {
+      "path": "db/migrations/0000_foundation.sql",
+      "sha256": "c5258835d8c6b94cda1e21ae2fd73b2d76034ed3c530a5129178fa50b29db412",
+      "sizeBytes": 2638
+    },
+    {
+      "path": "db/migrations/0001_clients.sql",
+      "sha256": "0db0c5f8cbc6f10df9634cc0ef10a3ce0e5fe162cd4a93ff6073ac84ebdbca6f",
+      "sizeBytes": 817
+    },
+    {
+      "path": "db/migrations/0002_demands_tasks.sql",
+      "sha256": "ab8198ffbe3e94655ae894b1d2826369ad14412470dcf42a3bbad966c41fea2e",
+      "sizeBytes": 5266
+    },
+    {
+      "path": "db/migrations/0003_materials.sql",
+      "sha256": "1509a2ff2bc083d61b42c28e880efec6a6bdee0105ece2cfcc132fd8f3c4fb7c",
+      "sizeBytes": 2643
+    },
+    {
+      "path": "db/migrations/0004_identity_audit.sql",
+      "sha256": "44c247d11206da77cc9e98c7ed9d3777c23ee3ecd86eaac3a801b39b1767810b",
+      "sizeBytes": 4353
+    },
+    {
+      "path": "db/migrations/0005_notifications.sql",
+      "sha256": "5804712d85cd3f2d319742e4d675c8b6d37bb94ad415ffcb33f4db69161c4ecb",
+      "sizeBytes": 2598
+    },
+    {
+      "path": "db/migrations/0006_refinement_templates_reports.sql",
+      "sha256": "a5e6457291fd66e197d2bbc7021a4c845dcd7c2976e06aa1ae3d399d89a35db7",
+      "sizeBytes": 4151
+    },
+    {
+      "path": "db/migrations/meta/_journal.json",
+      "sha256": "20d2174b40fb100299928e8a00ff570e774ff5dd0fceb7241e611c6ecd45894a",
+      "sizeBytes": 819
+    },
+    {
+      "path": "deploy/production/Dockerfile",
+      "sha256": "118bd67745ccae1f0dcb1eb59824a8184fe413a5aa683897c6d879056595d7f2",
+      "sizeBytes": 1372
+    },
+    {
+      "path": "deploy/production/db-init/00-roles.sql",
+      "sha256": "35d155e8097ce8b2134c303b66ad70e05382ea9a81af96134a17e331f1a2708e",
+      "sizeBytes": 771
+    },
+    {
+      "path": "deploy/production/docker-compose.yaml",
+      "sha256": "358eee67c2caf2b1f58e5b7616eef4a2b5543fa3aec875f704bb69e522989d99",
+      "sizeBytes": 3612
+    },
+    {
+      "path": "deploy/production/nginx.conf",
+      "sha256": "c274d4de44ea4686080f1fd1afe109e076e6534e6adc29a6e3c52ec0700d6e56",
+      "sizeBytes": 1355
+    },
+    {
+      "path": "package.json",
+      "sha256": "3b9b0f7c2f13f220dea4f5223d4b13d5c61d0e24839193af5290f15a59e6e3c3",
+      "sizeBytes": 1473
+    },
+    {
+      "path": "packages/contracts/package.json",
+      "sha256": "48ef670052ee024644d5974a06e1e0a04b302ef2ff04abbefff1405390634c06",
+      "sizeBytes": 313
+    },
+    {
+      "path": "packages/contracts/src/index.ts",
+      "sha256": "f90fc330130fdb085f1648fa7f67078369e34c79099db760583a8bef131d1bc4",
+      "sizeBytes": 38299
+    },
+    {
+      "path": "packages/contracts/tsconfig.json",
+      "sha256": "1ecf415f143d379317ba23b643e6dec51aa45498a8d34b83353b55ddbc9d9184",
+      "sizeBytes": 202
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "sha256": "6f0aae3a76c74f9d6253fb0137ed52fe02c2d46433d251b2e3cf11e3b19ae60d",
+      "sizeBytes": 85864
+    },
+    {
+      "path": "pnpm-workspace.yaml",
+      "sha256": "8f1751175cc3efadc9d08b64f4700779d398e90b462534510e6ff18075df1578",
+      "sizeBytes": 130
+    },
+    {
+      "path": "tsconfig.base.json",
+      "sha256": "b8b6918345ed676354c381da5afc23094a874b902ed97a2730e627b069e2fe68",
+      "sizeBytes": 244
+    }
+  ]
+}

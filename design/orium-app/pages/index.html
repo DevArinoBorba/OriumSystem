@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Visão Geral da Operação — OriumSystem</title>
+  <link rel="stylesheet" href="../tokens/colors.css" />
+  <link rel="stylesheet" href="../tokens/typography.css" />
+  <link rel="stylesheet" href="../tokens/spacing.css" />
+  <link rel="stylesheet" href="../components/button.css" />
+  <link rel="stylesheet" href="../components/card.css" />
+  <link rel="stylesheet" href="../components/badge.css" />
+  <link rel="stylesheet" href="../components/input.css" />
+  <link rel="stylesheet" href="../components/table.css" />
+  <link rel="stylesheet" href="../components/nav.css" />
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      min-height: 100vh;
+      background-color: var(--color-bg);
+      color: var(--color-text-main);
+    }
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+    .topbar {
+      padding: var(--space-5) var(--space-8);
+      border-bottom: 1px solid var(--color-border);
+      background-color: var(--color-surface);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 30;
+    }
+    .topbar-title h1 {
+      font-size: var(--font-size-xl);
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+    .topbar-subtitle {
+      font-size: var(--font-size-xs);
+      color: var(--color-text-muted);
+      margin-top: 2px;
+    }
+    .content-body {
+      padding: var(--space-8);
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-8);
+    }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: var(--space-5);
+    }
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: var(--space-4);
+    }
+    .section-header h2 {
+      font-size: var(--font-size-lg);
+      margin: 0;
+    }
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: var(--space-6);
+    }
+    @media (max-width: 1024px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .alert-card {
+      background-color: var(--color-warning-bg);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      border-radius: var(--radius-md);
+      padding: var(--space-4);
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-3);
+      color: var(--color-warning-text);
+      font-size: var(--font-size-sm);
+    }
+    .alert-card svg {
+      width: 1.25rem;
+      height: 1.25rem;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <img src="../../../company-reference-assets/logo-horizontal.png" alt="OriumDigital" class="sidebar-logo" id="brand-logo" />
+    </div>
+    <nav class="sidebar-nav">
+      <a href="index.html" class="nav-item active">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+        Visão Geral
+      </a>
+      <a href="minhas-tarefas.html" class="nav-item">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+        Minhas Tarefas
+      </a>
+      <a href="materiais.html" class="nav-item">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path></svg>
+        Materiais & Entregas
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-profile">
+        <div class="user-avatar">OA</div>
+        <div class="user-info">
+          <div class="name">Arino Orium</div>
+          <div class="role">Admin / Operação</div>
+        </div>
+      </div>
+      <button class="theme-toggle-btn" id="theme-toggle" aria-label="Alternar tema">
+        <svg id="theme-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="18" height="18"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <header class="topbar">
+      <div class="topbar-title">
+        <h1>Visão Geral da Operação <span class="badge badge-primary">Fase 10</span></h1>
+        <div class="topbar-subtitle">Monitoramento em tempo real dos fluxos de trabalho e demandas OriumDigital</div>
+      </div>
+      <div style="display: flex; gap: var(--space-3); align-items: center;">
+        <button class="btn btn-secondary btn-sm">Exportar Relatório</button>
+        <button class="btn btn-primary btn-sm">+ Nova Demanda</button>
+      </div>
+    </header>
+
+    <div class="content-body">
+
+      <!-- Alerta de gargalo -->
+      <div class="alert-card">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+        <div>
+          <strong>Atenção operacional:</strong> 3 demandas de tráfego pago aguardando validação de criativo há mais de 48h. Acelere a liberação na aba de Materiais.
+        </div>
+      </div>
+
+      <!-- KPIs -->
+      <div class="kpi-grid">
+        <div class="kpi-card card-glow">
+          <span class="kpi-label">Demandas em Andamento</span>
+          <span class="kpi-value tabular-nums">24</span>
+          <span class="kpi-trend positive">↑ 12% vs semana anterior</span>
+        </div>
+        <div class="kpi-card card-glow">
+          <span class="kpi-label">Aprovações Pendentes</span>
+          <span class="kpi-value tabular-nums">7</span>
+          <span class="kpi-trend warning">⚡ Requer ação do cliente</span>
+        </div>
+        <div class="kpi-card card-glow">
+          <span class="kpi-label">Entregas da Semana</span>
+          <span class="kpi-value tabular-nums">18</span>
+          <span class="kpi-trend positive">✓ 94% no prazo</span>
+        </div>
+        <div class="kpi-card card-glow">
+          <span class="kpi-label">Taxa de Conclusão (SLA)</span>
+          <span class="kpi-value tabular-nums">98.5%</span>
+          <span class="kpi-trend positive">↑ Excelente</span>
+        </div>
+      </div>
+
+      <!-- Seção Principal com Tabelas e Demandas -->
+      <div class="dashboard-grid">
+
+        <!-- Coluna Esquerda: Demandas Recentes -->
+        <div style="display: flex; flex-direction: column; gap: var(--space-4);">
+          <div class="section-header">
+            <h2>Demandas Recentes em Produção</h2>
+            <a href="minhas-tarefas.html" class="btn btn-ghost btn-sm">Ver todas →</a>
+          </div>
+
+          <div class="table-container">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Demanda / Cliente</th>
+                  <th>Área</th>
+                  <th>Status</th>
+                  <th>Prazo</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <strong>Redesign Portal E-commerce</strong><br>
+                    <span style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Cliente: Grupo Vanguarda</span>
+                  </td>
+                  <td><span class="badge badge-primary">Design / Web</span></td>
+                  <td><span class="badge badge-warning">Em Revisão</span></td>
+                  <td class="tabular-nums">18/10/2026</td>
+                </tr>
+                <tr>
+                  <td>
+                    <strong>Campanha Tráfego Black Friday</strong><br>
+                    <span style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Cliente: Alpha Store</span>
+                  </td>
+                  <td><span class="badge badge-info">Tráfego Pago</span></td>
+                  <td><span class="badge badge-primary">Em Produção</span></td>
+                  <td class="tabular-nums">20/10/2026</td>
+                </tr>
+                <tr>
+                  <td>
+                    <strong>Identidade Visual Corporativa</strong><br>
+                    <span style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Cliente: NeoTech Solutions</span>
+                  </td>
+                  <td><span class="badge badge-primary">Branding</span></td>
+                  <td><span class="badge badge-success">Aprovado</span></td>
+                  <td class="tabular-nums">15/10/2026</td>
+                </tr>
+                <tr>
+                  <td>
+                    <strong>Vídeo Institucional 60s</strong><br>
+                    <span style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Cliente: Innova Capital</span>
+                  </td>
+                  <td><span class="badge badge-danger">Vídeo / Edição</span></td>
+                  <td><span class="badge badge-warning">Aguardando Cliente</span></td>
+                  <td class="tabular-nums">22/10/2026</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Coluna Direita: Aprovações Pendentes & Atividade Recente -->
+        <div style="display: flex; flex-direction: column; gap: var(--space-6);">
+
+          <div>
+            <div class="section-header">
+              <h2>Aprovações Pendentes</h2>
+              <span class="badge badge-warning">7</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: var(--space-3);">
+
+              <div class="card" style="padding: var(--space-4);">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-2);">
+                  <strong>Landing Page SaaS v2</strong>
+                  <span class="badge badge-danger">Urgente</span>
+                </div>
+                <p style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin: 0 0 var(--space-3) 0;">Aguardando validação final de layout pelo cliente.</p>
+                <div style="display: flex; gap: var(--space-2);">
+                  <button class="btn btn-primary btn-sm" style="flex: 1;">Reenviar Link</button>
+                  <button class="btn btn-secondary btn-sm">Detalhes</button>
+                </div>
+              </div>
+
+              <div class="card" style="padding: var(--space-4);">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-2);">
+                  <strong>Pack Carrossel Instagram</strong>
+                  <span class="badge badge-warning">Pendente</span>
+                </div>
+                <p style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin: 0 0 var(--space-3) 0;">Cliente solicitou ajuste de cores no card 03.</p>
+                <div style="display: flex; gap: var(--space-2);">
+                  <button class="btn btn-primary btn-sm" style="flex: 1;">Ver Ajustes</button>
+                  <button class="btn btn-secondary btn-sm">Chat</button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    const themeToggle = document.getElementById('theme-toggle');
+    const htmlEl = document.documentElement;
+    const brandLogo = document.getElementById('brand-logo');
+
+    // Carregar tema salvo
+    const savedTheme = localStorage.getItem('orium-theme') || 'dark';
+    htmlEl.setAttribute('data-theme', savedTheme);
+    updateLogo(savedTheme);
+
+    themeToggle.addEventListener('click', () => {
+      const currentTheme = htmlEl.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      htmlEl.setAttribute('data-theme', newTheme);
+      localStorage.setItem('orium-theme', newTheme);
+      updateLogo(newTheme);
+    });
+
+    function updateLogo(theme) {
+      if (theme === 'light') {
+        brandLogo.src = '../../../company-reference-assets/logo-horizontal-light-theme.png';
+      } else {
+        brandLogo.src = '../../../company-reference-assets/logo-horizontal.png';
+      }
+    }
+  </script>
+</body>
+</html>

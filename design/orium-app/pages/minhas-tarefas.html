@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Minhas Tarefas por Colaborador — OriumSystem</title>
+  <link rel="stylesheet" href="../tokens/colors.css" />
+  <link rel="stylesheet" href="../tokens/typography.css" />
+  <link rel="stylesheet" href="../tokens/spacing.css" />
+  <link rel="stylesheet" href="../components/button.css" />
+  <link rel="stylesheet" href="../components/card.css" />
+  <link rel="stylesheet" href="../components/badge.css" />
+  <link rel="stylesheet" href="../components/input.css" />
+  <link rel="stylesheet" href="../components/table.css" />
+  <link rel="stylesheet" href="../components/nav.css" />
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      min-height: 100vh;
+      background-color: var(--color-bg);
+      color: var(--color-text-main);
+    }
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+    .topbar {
+      padding: var(--space-5) var(--space-8);
+      border-bottom: 1px solid var(--color-border);
+      background-color: var(--color-surface);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 30;
+    }
+    .topbar-title h1 {
+      font-size: var(--font-size-xl);
+      margin: 0;
+    }
+    .topbar-subtitle {
+      font-size: var(--font-size-xs);
+      color: var(--color-text-muted);
+      margin-top: 2px;
+    }
+    .content-body {
+      padding: var(--space-8);
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-6);
+    }
+    .filters-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--space-4);
+      background-color: var(--color-surface);
+      padding: var(--space-4);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+    }
+    .filter-group {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      flex-wrap: wrap;
+    }
+    .task-group-title {
+      font-size: var(--font-size-base);
+      font-weight: var(--font-weight-bold);
+      margin: var(--space-4) 0 var(--space-3) 0;
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+    .task-card {
+      background-color: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: var(--space-4);
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr auto;
+      align-items: center;
+      gap: var(--space-4);
+      transition: all var(--transition-fast);
+    }
+    .task-card:hover {
+      border-color: var(--color-primary-border);
+      background-color: var(--color-surface-hover);
+    }
+    @media (max-width: 1024px) {
+      .task-card {
+        grid-template-columns: 1fr;
+        gap: var(--space-2);
+      }
+    }
+    .checklist-progress {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      font-size: var(--font-size-xs);
+      color: var(--color-text-muted);
+    }
+    .progress-bar-container {
+      width: 80px;
+      height: 6px;
+      background-color: var(--color-surface-elevated);
+      border-radius: var(--radius-full);
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--gradient-brand);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <img src="../../../company-reference-assets/logo-horizontal.png" alt="OriumDigital" class="sidebar-logo" id="brand-logo" />
+    </div>
+    <nav class="sidebar-nav">
+      <a href="index.html" class="nav-item">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+        Visão Geral
+      </a>
+      <a href="minhas-tarefas.html" class="nav-item active">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+        Minhas Tarefas
+      </a>
+      <a href="materiais.html" class="nav-item">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path></svg>
+        Materiais & Entregas
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-profile">
+        <div class="user-avatar">OA</div>
+        <div class="user-info">
+          <div class="name">Arino Orium</div>
+          <div class="role">Admin / Operação</div>
+        </div>
+      </div>
+      <button class="theme-toggle-btn" id="theme-toggle" aria-label="Alternar tema">
+        <svg id="theme-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="18" height="18"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <header class="topbar">
+      <div class="topbar-title">
+        <h1>Minhas Tarefas por Colaborador</h1>
+        <div class="topbar-subtitle">Gestão de entregas individuais e acompanhamento de checklists operacionais</div>
+      </div>
+      <div>
+        <button class="btn btn-primary btn-sm">+ Criar Tarefa</button>
+      </div>
+    </header>
+
+    <div class="content-body">
+
+      <!-- Barra de Filtros -->
+      <div class="filters-bar">
+        <div class="filter-group">
+          <div class="search-box">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            <input type="text" class="input" placeholder="Buscar tarefas..." style="width: 260px;" />
+          </div>
+          <button class="filter-chip active">Todas (12)</button>
+          <button class="filter-chip">Hoje (4)</button>
+          <button class="filter-chip">Atrasadas (2)</button>
+          <button class="filter-chip">Em Revisão (3)</button>
+        </div>
+        <div class="filter-group">
+          <select class="select" style="width: 160px;">
+            <option>Colaborador: Todos</option>
+            <option>Arino Orium</option>
+            <option>Monique Orium</option>
+            <option>Equipe Design</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Agrupamento: Para Hoje -->
+      <div>
+        <div class="task-group-title">
+          <span>🔥 Para Hoje</span>
+          <span class="badge badge-danger">2 atrasadas</span>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: var(--space-3);">
+
+          <div class="task-card">
+            <div>
+              <strong>Revisar wireframes da Home Page — OriumDigital</strong>
+              <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: 2px;">Demanda: Redesign Portal Web • Cliente: Grupo Vanguarda</div>
+            </div>
+            <div>
+              <span class="badge badge-primary">Design UI/UX</span>
+            </div>
+            <div>
+              <div class="checklist-progress">
+                <span>Checklist: 4/5</span>
+                <div class="progress-bar-container"><div class="progress-bar-fill" style="width: 80%;"></div></div>
+              </div>
+            </div>
+            <div>
+              <span class="badge badge-danger">Prazo: Hoje, 18h</span>
+            </div>
+            <div>
+              <button class="btn btn-secondary btn-sm">Concluir</button>
+            </div>
+          </div>
+
+          <div class="task-card">
+            <div>
+              <strong>Configurar pixel de conversão Meta Ads</strong>
+              <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: 2px;">Demanda: Campanha Tráfego • Cliente: Alpha Store</div>
+            </div>
+            <div>
+              <span class="badge badge-info">Tráfego Pago</span>
+            </div>
+            <div>
+              <div class="checklist-progress">
+                <span>Checklist: 2/3</span>
+                <div class="progress-bar-container"><div class="progress-bar-fill" style="width: 66%;"></div></div>
+              </div>
+            </div>
+            <div>
+              <span class="badge badge-warning">Prazo: Hoje, 20h</span>
+            </div>
+            <div>
+              <button class="btn btn-secondary btn-sm">Concluir</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Agrupamento: Esta Semana -->
+      <div>
+        <div class="task-group-title">
+          <span>📅 Esta Semana</span>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: var(--space-3);">
+
+          <div class="task-card">
+            <div>
+              <strong>Exportar assets em SVG e PNG para o Design System</strong>
+              <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: 2px;">Demanda: Identidade OriumSystem • Interno</div>
+            </div>
+            <div>
+              <span class="badge badge-primary">Branding</span>
+            </div>
+            <div>
+              <div class="checklist-progress">
+                <span>Checklist: 5/5</span>
+                <div class="progress-bar-container"><div class="progress-bar-fill" style="width: 100%;"></div></div>
+              </div>
+            </div>
+            <div>
+              <span class="badge badge-success">Prazo: 16/10</span>
+            </div>
+            <div>
+              <button class="btn btn-secondary btn-sm">Revisar</button>
+            </div>
+          </div>
+
+          <div class="task-card">
+            <div>
+              <strong>Gravar locução do vídeo institucional 60s</strong>
+              <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: 2px;">Demanda: Vídeo Institucional • Cliente: Innova Capital</div>
+            </div>
+            <div>
+              <span class="badge badge-warning">Produção</span>
+            </div>
+            <div>
+              <div class="checklist-progress">
+                <span>Checklist: 1/4</span>
+                <div class="progress-bar-container"><div class="progress-bar-fill" style="width: 25%;"></div></div>
+              </div>
+            </div>
+            <div>
+              <span class="badge badge-neutral">Prazo: 18/10</span>
+            </div>
+            <div>
+              <button class="btn btn-secondary btn-sm">Detalhes</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    const themeToggle = document.getElementById('theme-toggle');
+    const htmlEl = document.documentElement;
+    const brandLogo = document.getElementById('brand-logo');
+
+    const savedTheme = localStorage.getItem('orium-theme') || 'dark';
+    htmlEl.setAttribute('data-theme', savedTheme);
+    updateLogo(savedTheme);
+
+    themeToggle.addEventListener('click', () => {
+      const currentTheme = htmlEl.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      htmlEl.setAttribute('data-theme', newTheme);
+      localStorage.setItem('orium-theme', newTheme);
+      updateLogo(newTheme);
+    });
+
+    function updateLogo(theme) {
+      if (theme === 'light') {
+        brandLogo.src = '../../../company-reference-assets/logo-horizontal-light-theme.png';
+      } else {
+        brandLogo.src = '../../../company-reference-assets/logo-horizontal.png';
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Materiais de Clientes e Entregas — OriumSystem</title>
+  <link rel="stylesheet" href="../tokens/colors.css" />
+  <link rel="stylesheet" href="../tokens/typography.css" />
+  <link rel="stylesheet" href="../tokens/spacing.css" />
+  <link rel="stylesheet" href="../components/button.css" />
+  <link rel="stylesheet" href="../components/card.css" />
+  <link rel="stylesheet" href="../components/badge.css" />
+  <link rel="stylesheet" href="../components/input.css" />
+  <link rel="stylesheet" href="../components/table.css" />
+  <link rel="stylesheet" href="../components/nav.css" />
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      min-height: 100vh;
+      background-color: var(--color-bg);
+      color: var(--color-text-main);
+    }
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+    .topbar {
+      padding: var(--space-5) var(--space-8);
+      border-bottom: 1px solid var(--color-border);
+      background-color: var(--color-surface);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 30;
+    }
+    .topbar-title h1 {
+      font-size: var(--font-size-xl);
+      margin: 0;
+    }
+    .topbar-subtitle {
+      font-size: var(--font-size-xs);
+      color: var(--color-text-muted);
+      margin-top: 2px;
+    }
+    .content-body {
+      padding: var(--space-8);
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-6);
+    }
+    .filters-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--space-4);
+      background-color: var(--color-surface);
+      padding: var(--space-4);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+    }
+    .filter-group {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      flex-wrap: wrap;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <img src="../../../company-reference-assets/logo-horizontal.png" alt="OriumDigital" class="sidebar-logo" id="brand-logo" />
+    </div>
+    <nav class="sidebar-nav">
+      <a href="index.html" class="nav-item">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+        Visão Geral
+      </a>
+      <a href="minhas-tarefas.html" class="nav-item">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+        Minhas Tarefas
+      </a>
+      <a href="materiais.html" class="nav-item active">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path></svg>
+        Materiais & Entregas
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-profile">
+        <div class="user-avatar">OA</div>
+        <div class="user-info">
+          <div class="name">Arino Orium</div>
+          <div class="role">Admin / Operação</div>
+        </div>
+      </div>
+      <button class="theme-toggle-btn" id="theme-toggle" aria-label="Alternar tema">
+        <svg id="theme-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="18" height="18"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <header class="topbar">
+      <div class="topbar-title">
+        <h1>Materiais de Clientes e Entregas</h1>
+        <div class="topbar-subtitle">Repositório central de arquivos recebidos, briefings e entregáveis finais validados</div>
+      </div>
+      <div>
+        <button class="btn btn-primary btn-sm">+ Enviar Material</button>
+      </div>
+    </header>
+
+    <div class="content-body">
+
+      <!-- Filtros -->
+      <div class="filters-bar">
+        <div class="filter-group">
+          <div class="search-box">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            <input type="text" class="input" placeholder="Buscar arquivos ou clientes..." style="width: 260px;" />
+          </div>
+          <button class="filter-chip active">Todos (28)</button>
+          <button class="filter-chip">Recebidos do Cliente</button>
+          <button class="filter-chip">Entregáveis Finais</button>
+          <button class="filter-chip">Aguardando Aprovação</button>
+        </div>
+        <div class="filter-group">
+          <select class="select" style="width: 180px;">
+            <option>Cliente: Todos</option>
+            <option>Grupo Vanguarda</option>
+            <option>Alpha Store</option>
+            <option>Innova Capital</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Tabela de Materiais -->
+      <div class="table-container">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Nome do Arquivo / Material</th>
+              <th>Cliente</th>
+              <th>Categoria</th>
+              <th>Status de Aprovação</th>
+              <th>Data / Versão</th>
+              <th style="text-align: right;">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <div style="display: flex; align-items: center; gap: var(--space-2);">
+                  <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="18" height="18" style="color: var(--color-primary);"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                  <strong>Brandbook_v3_Final.pdf</strong>
+                </div>
+                <span style="font-size: var(--font-size-xs); color: var(--color-text-muted);">PDF • 14.2 MB</span>
+              </td>
+              <td>Grupo Vanguarda</td>
+              <td><span class="badge badge-primary">Branding</span></td>
+              <td><span class="badge badge-success">Aprovado pelo Cliente</span></td>
+              <td class="tabular-nums">14/10/2026 (v3)</td>
+              <td style="text-align: right;">
+                <button class="btn btn-secondary btn-sm">Download</button>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <div style="display: flex; align-items: center; gap: var(--space-2);">
+                  <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="18" height="18" style="color: var(--color-primary);"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                  <strong>Criativos_BlackFriday_Set01.zip</strong>
+                </div>
+                <span style="font-size: var(--font-size-xs); color: var(--color-text-muted);">ZIP • 48.5 MB</span>
+              </td>
+              <td>Alpha Store</td>
+              <td><span class="badge badge-info">Tráfego Pago</span></td>
+              <td><span class="badge badge-warning">Em Revisão (v2)</span></td>
+              <td class="tabular-nums">13/10/2026 (v2)</td>
+              <td style="text-align: right;">
+                <button class="btn btn-secondary btn-sm">Download</button>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <div style="display: flex; align-items: center; gap: var(--space-2);">
+                  <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="18" height="18" style="color: var(--color-primary);"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                  <strong>VideoInstitucional_Draft_4K.mp4</strong>
+                </div>
+                <span style="font-size: var(--font-size-xs); color: var(--color-text-muted);">MP4 • 312 MB</span>
+              </td>
+              <td>Innova Capital</td>
+              <td><span class="badge badge-danger">Vídeo</span></td>
+              <td><span class="badge badge-danger">Aguardando Feedback</span></td>
+              <td class="tabular-nums">11/10/2026 (v1)</td>
+              <td style="text-align: right;">
+                <button class="btn btn-secondary btn-sm">Download</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    const themeToggle = document.getElementById('theme-toggle');
+    const htmlEl = document.documentElement;
+    const brandLogo = document.getElementById('brand-logo');
+
+    const savedTheme = localStorage.getItem('orium-theme') || 'dark';
+    htmlEl.setAttribute('data-theme', savedTheme);
+    updateLogo(savedTheme);
+
+    themeToggle.addEventListener('click', () => {
+      const currentTheme = htmlEl.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      htmlEl.setAttribute('data-theme', newTheme);
+      localStorage.setItem('orium-theme', newTheme);
+      updateLogo(newTheme);
+    });
+
+    function updateLogo(theme) {
+      if (theme === 'light') {
+        brandLogo.src = '../../../company-reference-assets/logo-horizontal-light-theme.png';
+      } else {
+        brandLogo.src = '../../../company-reference-assets/logo-horizontal.png';
+      }
+    }
+  </script>
+</body>
+</html>
