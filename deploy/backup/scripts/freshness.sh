@@ -24,11 +24,26 @@ case "$MODE" in
     # last_stage_failed; NUNCA ok=true apenas por existir dump antigo.
     if [[ -n "$FAILED_STAGE" ]]; then
       STAMP="$(date -u +%Y-%m-%dT%H%M%SZ)"
-      node -e "const fs=require('fs');const f=process.env.F;const x={ok:false,stage:'failed',last_stage_failed:process.env.S,stamp:process.env.STAMP,retention_days:Number(process.env.RD||30),retention_mode:process.env.RM||'dryrun',rpo_sec:Number(process.env.RPO||86400)};fs.writeFileSync(f,JSON.stringify(x)+'\n')" \
-        F="$F" S="$FAILED_STAGE" STAMP="$STAMP" RD="${ORIUM_RETENTION_DAYS:-30}" RM="${ORIUM_RETENTION_MODE:-dryrun}" RPO="$RPO"
+      OK="false" STAGE_FAILED="$FAILED_STAGE" STAMP="$STAMP" RD="${ORIUM_RETENTION_DAYS:-30}" RM="${ORIUM_RETENTION_MODE:-dryrun}" RPO="$RPO" F="$F" \
+        node -e "const fs=require('fs');const x={ok:false,stage:'failed',last_stage_failed:process.env.STAGE_FAILED,stamp:process.env.STAMP,retention_days:Number(process.env.RD||30),retention_mode:process.env.RM||'dryrun',rpo_sec:Number(process.env.RPO||86400)};fs.writeFileSync(process.env.F,JSON.stringify(x)+'\n')"
       echo "freshness: FAILED stage='$FAILED_STAGE' (ok=false)" >&2
       exit 1
     fi
+    [[ -n "$DIR" && -d "$DIR" ]] || { echo "freshness: DIR inválido" >&2; exit 2; }
+    STAMP="$(date -u +%Y-%m-%dT%H%M%SZ)"
+    # escolha o dump mais recente confirmado
+    LATEST="$(ls -1t "$DIR"/orium_*.dump 2>/dev/null | head -1 || true)"
+    LATEST_NAME="$(basename "$LATEST" 2>/dev/null || echo '')"
+    if [[ -n "$LATEST" ]]; then
+      LATEST_MTIME="$(stat -c%Y "$LATEST")"
+    else
+      LATEST_MTIME="0"
+    fi
+    NOW_EPOCH="$(date +%s)"
+    AGE=$(( NOW_EPOCH - LATEST_MTIME ))
+    OK=false; [[ -n "$LATEST" && $AGE -le "$RPO" ]] && OK=true
+    OK="$OK" STAMP="$STAMP" L="$LATEST_NAME" A="$AGE" RPO="$RPO" RD="${ORIUM_RETENTION_DAYS:-30}" RM="${ORIUM_RETENTION_MODE:-dryrun}" F="$F" \
+      node -e "const fs=require('fs');const x={ok:process.env.OK==='true',stage:'ok',stamp:process.env.STAMP,latest:process.env.L,age_sec:Number(process.env.A),rpo_sec:Number(process.env.RPO),retention_days:Number(process.env.RD||30),retention_mode:process.env.RM||'dryrun'};fs.writeFileSync(process.env.F,JSON.stringify(x)+'\n')"
     [[ -n "$DIR" && -d "$DIR" ]] || { echo "freshness: DIR inválido" >&2; exit 2; }
     STAMP="$(date -u +%Y-%m-%dT%H%M%SZ)"
     # escolha o dump mais recente confirmado
