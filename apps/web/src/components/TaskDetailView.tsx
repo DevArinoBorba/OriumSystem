@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { ChangeEvent, ClipboardEvent, FormEvent } from 'react';
 import type {
   Requirement,
   SessionResponse,
@@ -8,6 +8,67 @@ import type {
 } from '@orium/contracts';
 import { api, ApiError } from '../api.js';
 import type { UserListItem } from '../types.js';
+
+const MAX_PRINTS_PER_MESSAGE = 4;
+const PRINT_REGEX = /!\[[^\]]*\]\((data:image\/(?:png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+)\)/g;
+
+async function compressImageBlob(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const maxDim = 1440;
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        if (width >= height) {
+          height = Math.max(1, Math.round((height * maxDim) / width));
+          width = maxDim;
+        } else {
+          width = Math.max(1, Math.round((width * maxDim) / height));
+          height = maxDim;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Falha ao processar print.'));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      let dataUrl = canvas.toDataURL('image/webp', 0.84);
+      if (!dataUrl.startsWith('data:image/webp')) {
+        dataUrl = canvas.toDataURL('image/jpeg', 0.84);
+      }
+      resolve(dataUrl);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Arquivo de imagem inválido.'));
+    };
+    img.src = objectUrl;
+  });
+}
+
+function parseContentWithPrints(raw: string): { text: string; images: string[] } {
+  const images: string[] = [];
+  const text = raw
+    .replace(PRINT_REGEX, (_match, dataUrl: string) => {
+      images.push(dataUrl);
+      return '';
+    })
+    .trim();
+  return { text, images };
+}
+
+function combineTextAndPrints(text: string, images: string[]): string {
+  const trimmed = text.trim();
+  if (images.length === 0) return trimmed;
+  const imageBlocks = images.map((url, idx) => `![Print ${idx + 1}](${url})`).join('\n');
+  return trimmed ? `${trimmed}\n\n${imageBlocks}` : imageBlocks;
+}
 
 export interface TaskDetailViewProps {
   taskId: string;
@@ -131,6 +192,13 @@ export function TaskDetailView({
   });
 
   const [commentDraft, setCommentDraft] = useState('');
+  const [commentImages, setCommentImages] = useState<string[]>([]);
+  const [submitReviewImages, setSubmitReviewImages] = useState<string[]>([]);
+  const [reviewImages, setReviewImages] = useState<string[]>([]);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const commentFileInputRef = useRef<HTMLInputElement>(null);
+  const submitReviewFileInputRef = useRef<HTMLInputElement>(null);
+  const reviewFileInputRef = useRef<HTMLInputElement>(null);
 
   // Is current user assigned to this task?
   const isAssignee = task?.assignedToUserId === session.user.id;
@@ -263,13 +331,79 @@ export function TaskDetailView({
     }, 'Produção iniciada com sucesso!');
   };
 
+  useEffect(() => {
+    if (!lightboxImage) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setLightboxImage(null);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [lightboxImage]);
+
+  const appendImageBlobs = async (
+    blobs: Blob[],
+    currentImages: string[],
+    setImages: (updater: (prev: string[]) => string[]) => void,
+  ) => {
+    const remainingSlots = MAX_PRINTS_PER_MESSAGE - currentImages.length;
+    if (remainingSlots <= 0) {
+      setActionError(`Limite máximo de ${MAX_PRINTS_PER_MESSAGE} prints por envio atingido.`);
+      return;
+    }
+    const toProcess = blobs.slice(0, remainingSlots);
+    try {
+      const compressed = await Promise.all(toProcess.map((b) => compressImageBlob(b)));
+      setImages((prev) => [...prev, ...compressed].slice(0, MAX_PRINTS_PER_MESSAGE));
+      setActionError(null);
+    } catch {
+      setActionError('Não foi possível processar o print colado. Tente outra imagem.');
+    }
+  };
+
+  const handlePasteImages = (
+    event: ClipboardEvent<HTMLTextAreaElement>,
+    currentImages: string[],
+    setImages: (updater: (prev: string[]) => string[]) => void,
+  ) => {
+    const items = event.clipboardData?.items;
+    if (!items) return;
+    const imageBlobs: Blob[] = [];
+    for (let i = 0; i < items.length; i += 1) {
+      const item = items[i];
+      if (item && item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) imageBlobs.push(file);
+      }
+    }
+    if (imageBlobs.length > 0) {
+      event.preventDefault();
+      void appendImageBlobs(imageBlobs, currentImages, setImages);
+    }
+  };
+
+  const handleSelectImageFiles = (
+    event: ChangeEvent<HTMLInputElement>,
+    currentImages: string[],
+    setImages: (updater: (prev: string[]) => string[]) => void,
+  ) => {
+    const fileList = event.target.files;
+    if (!fileList || fileList.length === 0) return;
+    const blobs = Array.from(fileList).filter((f) => f.type.startsWith('image/'));
+    event.target.value = '';
+    if (blobs.length > 0) {
+      void appendImageBlobs(blobs, currentImages, setImages);
+    }
+  };
+
   const handleSubmitReview = (e: FormEvent) => {
     e.preventDefault();
     if (!task || !isAssignee) return;
 
-    const trimmedNotes = submitReviewDraft.deliveryNotes.trim();
-    if (!trimmedNotes) {
-      setActionError('As notas de entrega são obrigatórias.');
+    const combinedNotes = combineTextAndPrints(submitReviewDraft.deliveryNotes, submitReviewImages);
+    if (!combinedNotes) {
+      setActionError('As notas de entrega (ou ao menos um print) são obrigatórias.');
       return;
     }
 
@@ -285,13 +419,14 @@ export function TaskDetailView({
         task.id,
         {
           version: task.version,
-          deliveryNotes: trimmedNotes,
+          deliveryNotes: combinedNotes,
           previewUrl: trimmedUrl || null,
         },
         controller.signal,
         onUnauthorized,
       );
       setSubmitReviewDraft({ deliveryNotes: '', previewUrl: '', active: false });
+      setSubmitReviewImages([]);
     }, 'Tarefa enviada para revisão com sucesso!');
   };
 
@@ -396,7 +531,7 @@ export function TaskDetailView({
   const handleReviewTask = (e: FormEvent) => {
     e.preventDefault();
     if (!task || !isAdmin) return;
-    const feedback = reviewDraft.feedback.trim();
+    const feedback = combineTextAndPrints(reviewDraft.feedback, reviewImages);
     if (!feedback) {
       setActionError('O feedback da avaliação é obrigatório.');
       return;
@@ -415,6 +550,7 @@ export function TaskDetailView({
         onUnauthorized,
       );
       setReviewDraft({ decision: 'complete', feedback: '', active: false });
+      setReviewImages([]);
     }, reviewDraft.decision === 'complete' ? 'Tarefa concluída com sucesso!' : 'Ajustes solicitados ao colaborador.');
   };
 
@@ -457,7 +593,7 @@ export function TaskDetailView({
   const handleAddComment = (e: FormEvent) => {
     e.preventDefault();
     if (!task) return;
-    const content = commentDraft.trim();
+    const content = combineTextAndPrints(commentDraft, commentImages);
     if (!content) return;
 
     executeAction(async () => {
@@ -470,6 +606,7 @@ export function TaskDetailView({
       );
       setComments(res.comments);
       setCommentDraft('');
+      setCommentImages([]);
     }, 'Comentário adicionado com sucesso!');
   };
 
@@ -575,17 +712,37 @@ export function TaskDetailView({
           {task.description || <span className="muted">Nenhuma descrição informada.</span>}
         </p>
 
-        {task.deliveryNotes && (
-          <div style={{ background: 'var(--color-primary-light)', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
-            <label>Notas de Entrega (Revisão)</label>
-            <p style={{ margin: '4px 0 0', whiteSpace: 'pre-wrap' }}>{task.deliveryNotes}</p>
-            {task.previewUrl && (
-              <p style={{ margin: '8px 0 0' }}>
-                Prévia: <a href={task.previewUrl} target="_blank" rel="noreferrer noopener" style={{ wordBreak: 'break-all' }}>{task.previewUrl}</a>
-              </p>
-            )}
-          </div>
-        )}
+        {task.deliveryNotes && (() => {
+          const parsedNotes = parseContentWithPrints(task.deliveryNotes);
+          return (
+            <div style={{ background: 'var(--color-primary-light)', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
+              <label>Notas de Entrega (Revisão)</label>
+              {parsedNotes.text && (
+                <p style={{ margin: '4px 0 0', whiteSpace: 'pre-wrap' }}>{parsedNotes.text}</p>
+              )}
+              {parsedNotes.images.length > 0 && (
+                <div className="comment-prints-grid" style={{ marginTop: '10px' }}>
+                  {parsedNotes.images.map((imgUrl, idx) => (
+                    <button
+                      key={`delivery-print-${idx}`}
+                      type="button"
+                      className="comment-print-thumb-btn"
+                      onClick={() => setLightboxImage(imgUrl)}
+                      title="Clique para ampliar o print"
+                    >
+                      <img src={imgUrl} alt={`Print de entrega ${idx + 1}`} className="comment-print-thumb" />
+                    </button>
+                  ))}
+                </div>
+              )}
+              {task.previewUrl && (
+                <p style={{ margin: '8px 0 0' }}>
+                  Prévia: <a href={task.previewUrl} target="_blank" rel="noreferrer noopener" style={{ wordBreak: 'break-all' }}>{task.previewUrl}</a>
+                </p>
+              )}
+            </div>
+          );
+        })()}
 
         {task.pauseRequestedAt && task.status === 'in_production' && (
           <div style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
@@ -726,10 +883,54 @@ export function TaskDetailView({
               id="deliveryNotes"
               value={submitReviewDraft.deliveryNotes}
               onChange={(e) => setSubmitReviewDraft({ ...submitReviewDraft, deliveryNotes: e.target.value })}
-              placeholder="Descreva o que foi entregue, referências e orientações de validação..."
+              onPaste={(e) => handlePasteImages(e, submitReviewImages, setSubmitReviewImages)}
+              placeholder="Descreva o que foi entregue, referências e orientações de validação... (Cole prints com Ctrl + V)"
               disabled={busy}
-              required
+              required={submitReviewImages.length === 0}
             />
+            <div className="print-paste-toolbar">
+              <input
+                ref={submitReviewFileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                multiple
+                style={{ display: 'none' }}
+                onChange={(e) => handleSelectImageFiles(e, submitReviewImages, setSubmitReviewImages)}
+              />
+              <button
+                type="button"
+                className="secondary-button small"
+                onClick={() => submitReviewFileInputRef.current?.click()}
+                disabled={busy || submitReviewImages.length >= MAX_PRINTS_PER_MESSAGE}
+              >
+                📎 Anexar print ({submitReviewImages.length}/{MAX_PRINTS_PER_MESSAGE})
+              </button>
+              <span className="print-paste-hint">ou pressione <strong>Ctrl + V</strong> no campo de texto</span>
+            </div>
+            {submitReviewImages.length > 0 && (
+              <div className="comment-prints-draft-grid">
+                {submitReviewImages.map((imgUrl, idx) => (
+                  <div key={`sub-draft-${idx}`} className="comment-print-draft-item">
+                    <button
+                      type="button"
+                      className="comment-print-thumb-btn"
+                      onClick={() => setLightboxImage(imgUrl)}
+                      title="Clique para ampliar"
+                    >
+                      <img src={imgUrl} alt={`Print anexado ${idx + 1}`} className="comment-print-thumb" />
+                    </button>
+                    <button
+                      type="button"
+                      className="comment-print-remove-btn"
+                      onClick={() => setSubmitReviewImages((prev) => prev.filter((_, i) => i !== idx))}
+                      aria-label={`Remover print ${idx + 1}`}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div>
@@ -835,10 +1036,54 @@ export function TaskDetailView({
               id="reviewFeedback"
               value={reviewDraft.feedback}
               onChange={(e) => setReviewDraft({ ...reviewDraft, feedback: e.target.value })}
-              placeholder="Descreva os pontos validados ou os ajustes necessários..."
+              onPaste={(e) => handlePasteImages(e, reviewImages, setReviewImages)}
+              placeholder="Descreva os pontos validados ou os ajustes necessários... (Cole prints com Ctrl + V)"
               disabled={busy}
-              required
+              required={reviewImages.length === 0}
             />
+            <div className="print-paste-toolbar">
+              <input
+                ref={reviewFileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                multiple
+                style={{ display: 'none' }}
+                onChange={(e) => handleSelectImageFiles(e, reviewImages, setReviewImages)}
+              />
+              <button
+                type="button"
+                className="secondary-button small"
+                onClick={() => reviewFileInputRef.current?.click()}
+                disabled={busy || reviewImages.length >= MAX_PRINTS_PER_MESSAGE}
+              >
+                📎 Anexar print ({reviewImages.length}/{MAX_PRINTS_PER_MESSAGE})
+              </button>
+              <span className="print-paste-hint">ou pressione <strong>Ctrl + V</strong> no campo de texto</span>
+            </div>
+            {reviewImages.length > 0 && (
+              <div className="comment-prints-draft-grid">
+                {reviewImages.map((imgUrl, idx) => (
+                  <div key={`rev-draft-${idx}`} className="comment-print-draft-item">
+                    <button
+                      type="button"
+                      className="comment-print-thumb-btn"
+                      onClick={() => setLightboxImage(imgUrl)}
+                      title="Clique para ampliar"
+                    >
+                      <img src={imgUrl} alt={`Print anexado ${idx + 1}`} className="comment-print-thumb" />
+                    </button>
+                    <button
+                      type="button"
+                      className="comment-print-remove-btn"
+                      onClick={() => setReviewImages((prev) => prev.filter((_, i) => i !== idx))}
+                      aria-label={`Remover print ${idx + 1}`}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
@@ -1107,25 +1352,45 @@ export function TaskDetailView({
           <p className="muted">Nenhum comentário registrado.</p>
         ) : (
           <div style={{ display: 'grid', gap: '12px', marginBottom: '20px' }}>
-            {comments.map((c) => (
-              <div
-                key={c.id}
-                style={{
-                  padding: '12px 14px',
-                  background: 'var(--color-surface)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: '8px',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <strong>{c.authorName}</strong>
-                  <span className="muted" style={{ fontSize: '0.8rem' }}>
-                    {new Date(c.createdAt).toLocaleString('pt-BR')}
-                  </span>
+            {comments.map((c) => {
+              const parsed = parseContentWithPrints(c.content);
+              return (
+                <div
+                  key={c.id}
+                  style={{
+                    padding: '12px 14px',
+                    background: 'var(--color-surface)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: '8px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <strong>{c.authorName}</strong>
+                    <span className="muted" style={{ fontSize: '0.8rem' }}>
+                      {new Date(c.createdAt).toLocaleString('pt-BR')}
+                    </span>
+                  </div>
+                  {parsed.text && (
+                    <p style={{ margin: 0, whiteSpace: 'pre-wrap', color: 'var(--color-text-main)' }}>{parsed.text}</p>
+                  )}
+                  {parsed.images.length > 0 && (
+                    <div className="comment-prints-grid" style={{ marginTop: parsed.text ? '10px' : '4px' }}>
+                      {parsed.images.map((imgUrl, idx) => (
+                        <button
+                          key={`${c.id}-print-${idx}`}
+                          type="button"
+                          className="comment-print-thumb-btn"
+                          onClick={() => setLightboxImage(imgUrl)}
+                          title="Clique para ampliar o print"
+                        >
+                          <img src={imgUrl} alt={`Print do comentário ${idx + 1}`} className="comment-print-thumb" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <p style={{ margin: 0, whiteSpace: 'pre-wrap', color: 'var(--color-text-main)' }}>{c.content}</p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -1136,18 +1401,104 @@ export function TaskDetailView({
             id="newComment"
             value={commentDraft}
             onChange={(e) => setCommentDraft(e.target.value)}
-            placeholder="Escreva um comentário sobre o andamento da tarefa..."
+            onPaste={(e) => handlePasteImages(e, commentImages, setCommentImages)}
+            placeholder="Escreva um comentário sobre o andamento da tarefa... (Dica: pressione Ctrl + V para colar prints direto da área de transferência)"
             disabled={busy}
             rows={3}
-            required
+            required={commentImages.length === 0}
           />
-          <div style={{ justifySelf: 'start' }}>
-            <button type="submit" className="primary-button small" disabled={busy || !commentDraft.trim()}>
+
+          <div className="print-paste-toolbar">
+            <input
+              ref={commentFileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              multiple
+              style={{ display: 'none' }}
+              onChange={(e) => handleSelectImageFiles(e, commentImages, setCommentImages)}
+            />
+            <button
+              type="button"
+              className="secondary-button small"
+              onClick={() => commentFileInputRef.current?.click()}
+              disabled={busy || commentImages.length >= MAX_PRINTS_PER_MESSAGE}
+            >
+              📎 Anexar print / imagem ({commentImages.length}/{MAX_PRINTS_PER_MESSAGE})
+            </button>
+            <span className="print-paste-hint">
+              💡 Você também pode colar prints direto com <strong>Ctrl + V</strong> no campo acima
+            </span>
+          </div>
+
+          {commentImages.length > 0 && (
+            <div className="comment-prints-draft-grid" aria-label="Prints anexados ao comentário">
+              {commentImages.map((imgUrl, idx) => (
+                <div key={`comment-draft-${idx}`} className="comment-print-draft-item">
+                  <button
+                    type="button"
+                    className="comment-print-thumb-btn"
+                    onClick={() => setLightboxImage(imgUrl)}
+                    title="Clique para ampliar o print"
+                  >
+                    <img src={imgUrl} alt={`Print anexado ${idx + 1}`} className="comment-print-thumb" />
+                  </button>
+                  <button
+                    type="button"
+                    className="comment-print-remove-btn"
+                    onClick={() => setCommentImages((prev) => prev.filter((_, i) => i !== idx))}
+                    aria-label={`Remover print ${idx + 1}`}
+                    title="Remover print"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ justifySelf: 'start', marginTop: '4px' }}>
+            <button
+              type="submit"
+              className="primary-button small"
+              disabled={busy || (!commentDraft.trim() && commentImages.length === 0)}
+            >
               {busy ? 'Enviando...' : 'Publicar Comentário'}
             </button>
           </div>
         </form>
       </section>
+
+      {/* Lightbox modal for viewing attached prints in full resolution */}
+      {lightboxImage && (
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Visualização ampliada do print"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setLightboxImage(null);
+            }
+          }}
+        >
+          <div className="print-lightbox-card">
+            <div className="print-lightbox-header">
+              <span>Visualização do Print</span>
+              <button
+                type="button"
+                className="close-button"
+                onClick={() => setLightboxImage(null)}
+                aria-label="Fechar visualização do print"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="print-lightbox-body">
+              <img src={lightboxImage} alt="Print ampliado" className="print-lightbox-img" />
+            </div>
+          </div>
+        </div>
+      )}
     </article>
   );
 }

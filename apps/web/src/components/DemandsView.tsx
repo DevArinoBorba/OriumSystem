@@ -371,6 +371,17 @@ export function DemandsView({
     }
   }
 
+  useEffect(() => {
+    if (!demandFormOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !demandFormBusy) {
+        setDemandFormOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [demandFormOpen, demandFormBusy]);
+
   async function handleCreateDemand(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (demandFormSubmittingRef.current) return;
@@ -1009,118 +1020,132 @@ export function DemandsView({
           </>
         )}
 
-        {/* Create demand inline form (admin) */}
+        {/* Create demand modal pop-up (admin) */}
         {isAdmin && demandFormOpen && (
-          <section className="inline-panel" aria-labelledby="demand-form-heading">
-            <div className="panel-header">
-              <h2 id="demand-form-heading">Novo chamado</h2>
-              <button
-                type="button"
-                className="close-button"
-                onClick={() => setDemandFormOpen(false)}
-                aria-label="Fechar formulário"
-                disabled={demandFormBusy}
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={(event) => void handleCreateDemand(event)} noValidate>
-              {demandFormError && (
-                <div className="alert-banner error" role="alert">
-                  <span>{demandFormError}</span>
-                </div>
-              )}
-
-              <div className="form-field">
-                <label htmlFor="demand-form-client">Cliente *</label>
-                <select
-                  id="demand-form-client"
-                  value={demandForm.clientId}
-                  onChange={(event) => setDemandForm({ ...demandForm, clientId: event.target.value })}
+          <div
+            className="modal-backdrop"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="demand-form-heading"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget && !demandFormBusy) {
+                setDemandFormOpen(false);
+              }
+            }}
+          >
+            <div className="modal-card">
+              <div className="modal-header">
+                <h2 id="demand-form-heading">Novo chamado</h2>
+                <button
+                  type="button"
+                  className="close-button"
+                  onClick={() => setDemandFormOpen(false)}
+                  aria-label="Fechar formulário"
                   disabled={demandFormBusy}
-                  required
                 >
-                  <option value="" disabled>
-                    {clientsLoaded ? 'Selecione o cliente…' : 'Carregando clientes…'}
-                  </option>
-                  {clients.map((client) => (
-                    <option key={client.id} value={client.id}>
-                      {client.name}
-                    </option>
-                  ))}
-                </select>
+                  ✕
+                </button>
               </div>
 
-              <div className="form-field">
-                <label htmlFor="demand-form-title">Título do chamado *</label>
-                <input
-                  ref={demandTitleInputRef}
-                  id="demand-form-title"
-                  type="text"
-                  maxLength={160}
-                  value={demandForm.title}
-                  onChange={(event) => setDemandForm({ ...demandForm, title: event.target.value })}
-                  required
-                  disabled={demandFormBusy}
-                />
-              </div>
+              <form onSubmit={(event) => void handleCreateDemand(event)} noValidate className="modal-body" style={{ marginBottom: 0 }}>
+                {demandFormError && (
+                  <div className="alert-banner error" role="alert">
+                    <span>{demandFormError}</span>
+                  </div>
+                )}
 
-              <div className="form-field">
-                <label htmlFor="demand-form-description">Descrição</label>
-                <textarea
-                  id="demand-form-description"
-                  rows={4}
-                  maxLength={5000}
-                  value={demandForm.description}
-                  onChange={(event) => setDemandForm({ ...demandForm, description: event.target.value })}
-                  disabled={demandFormBusy}
-                />
-              </div>
-
-              <div className="form-row">
                 <div className="form-field">
-                  <label htmlFor="demand-form-priority">Prioridade</label>
+                  <label htmlFor="demand-form-client">Cliente *</label>
                   <select
-                    id="demand-form-priority"
-                    value={demandForm.priority}
-                    onChange={(event) =>
-                      setDemandForm({ ...demandForm, priority: event.target.value as DemandFormState['priority'] })
-                    }
+                    id="demand-form-client"
+                    value={demandForm.clientId}
+                    onChange={(event) => setDemandForm({ ...demandForm, clientId: event.target.value })}
                     disabled={demandFormBusy}
+                    required
                   >
-                    <option value="low">Baixa</option>
-                    <option value="normal">Normal</option>
-                    <option value="high">Alta</option>
-                    <option value="urgent">Urgente</option>
+                    <option value="" disabled>
+                      {clientsLoaded ? 'Selecione o cliente…' : 'Carregando clientes…'}
+                    </option>
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
+
                 <div className="form-field">
-                  <label htmlFor="demand-form-date" className="fieldset-label">
-                    Data de entrega geral do chamado *
-                  </label>
+                  <label htmlFor="demand-form-title">Título do chamado *</label>
                   <input
-                    id="demand-form-date"
-                    type="date"
-                    value={demandForm.deliveryDate}
-                    onChange={(event) => setDemandForm({ ...demandForm, deliveryDate: event.target.value })}
+                    ref={demandTitleInputRef}
+                    id="demand-form-title"
+                    type="text"
+                    placeholder="Ex.: Campanha de lançamento ou Nova Landing Page"
+                    maxLength={160}
+                    value={demandForm.title}
+                    onChange={(event) => setDemandForm({ ...demandForm, title: event.target.value })}
                     required
                     disabled={demandFormBusy}
                   />
-                  <span className="muted-text">Defina o prazo acordado com o cliente.</span>
                 </div>
-              </div>
 
-              <div className="panel-actions">
-                <button type="button" className="secondary-button" onClick={() => setDemandFormOpen(false)} disabled={demandFormBusy}>
-                  Cancelar
-                </button>
-                <button type="submit" className="primary-button" disabled={demandFormBusy}>
-                  {demandFormBusy ? 'Criando…' : 'Abrir chamado'}
-                </button>
-              </div>
-            </form>
-          </section>
+                <div className="form-field">
+                  <label htmlFor="demand-form-description">Descrição</label>
+                  <textarea
+                    id="demand-form-description"
+                    rows={4}
+                    placeholder="Contexto, referências e orientações gerais do entregável…"
+                    maxLength={5000}
+                    value={demandForm.description}
+                    onChange={(event) => setDemandForm({ ...demandForm, description: event.target.value })}
+                    disabled={demandFormBusy}
+                  />
+                </div>
+
+                <div className="form-row">
+                  <div className="form-field">
+                    <label htmlFor="demand-form-priority">Prioridade</label>
+                    <select
+                      id="demand-form-priority"
+                      value={demandForm.priority}
+                      onChange={(event) =>
+                        setDemandForm({ ...demandForm, priority: event.target.value as DemandFormState['priority'] })
+                      }
+                      disabled={demandFormBusy}
+                    >
+                      <option value="low">Baixa</option>
+                      <option value="normal">Normal</option>
+                      <option value="high">Alta</option>
+                      <option value="urgent">Urgente</option>
+                    </select>
+                  </div>
+                  <div className="form-field">
+                    <label htmlFor="demand-form-date" className="fieldset-label">
+                      Data de entrega geral do chamado *
+                    </label>
+                    <input
+                      id="demand-form-date"
+                      type="date"
+                      value={demandForm.deliveryDate}
+                      onChange={(event) => setDemandForm({ ...demandForm, deliveryDate: event.target.value })}
+                      required
+                      disabled={demandFormBusy}
+                    />
+                    <span className="muted-text">Defina o prazo acordado com o cliente.</span>
+                  </div>
+                </div>
+
+                <div className="modal-actions">
+                  <button type="button" className="secondary-button" onClick={() => setDemandFormOpen(false)} disabled={demandFormBusy}>
+                    Cancelar
+                  </button>
+                  <button type="submit" className="primary-button" disabled={demandFormBusy}>
+                    {demandFormBusy ? 'Criando…' : 'Abrir chamado'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         )}
 
         {/* Modals for templates */}

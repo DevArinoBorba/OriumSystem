@@ -5,7 +5,7 @@ export type Role = z.infer<typeof roleSchema>;
 
 export const permissionSchema = z.enum([
   'protected.read', 'users.read', 'users.create', 'users.deactivate', 'roles.manage',
-  'clients.read', 'clients.write', 'clients.archive',
+  'clients.read', 'clients.read.assigned', 'clients.write', 'clients.manage', 'clients.team.manage', 'clients.archive',
   'demands.read', 'demands.write',
   'tasks.read', 'tasks.manage', 'tasks.execute', 'tasks.review',
   'materials.read', 'materials.write', 'materials.archive',
@@ -21,16 +21,94 @@ export const createUserSchema = loginSchema.extend({
   password: z.string().min(1).max(128),
   role: roleSchema.default('collaborator'),
 });
+export const avatarImageSchema = z.union([
+  z.string().url(),
+  z.string().startsWith('data:image/'),
+]);
 export const publicUserSchema = z.object({
-  id: z.string(), name: z.string(), email: z.email(),
+  id: z.string(),
+  name: z.string(),
+  email: z.email(),
+  image: avatarImageSchema.nullable().optional(),
 });
+export type PublicUser = z.infer<typeof publicUserSchema>;
+export const updateProfileSchema = z.object({
+  name: z.string().trim().min(2).max(100),
+  image: avatarImageSchema.nullable().optional(),
+}).strict();
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(128),
+  newPassword: z.string().min(1).max(128),
+}).strict();
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export const sessionResponseSchema = z.object({
   user: publicUserSchema, roles: z.array(roleSchema), permissions: z.array(permissionSchema),
 });
 export type SessionResponse = z.infer<typeof sessionResponseSchema>;
 export const changeRoleSchema = z.object({ role: roleSchema }).strict();
 export const deactivateUserSchema = z.object({ active: z.literal(false) }).strict();
-export const rolePermissionsSchema = z.object({ permissions: z.array(permissionSchema).max(17) }).strict();
+export const rolePermissionsSchema = z.object({ permissions: z.array(permissionSchema).max(20) }).strict();
+
+// ==========================================
+// FASE 2 & 2A: CLIENTES, ESCOPO CONTRATADO E EQUIPE
+// ==========================================
+
+export const clientContractStatusSchema = z.enum([
+  'onboarding',
+  'active',
+  'paused',
+  'offboarding',
+  'archived',
+]);
+export const contractStatusSchema = clientContractStatusSchema;
+export type ClientContractStatus = z.infer<typeof clientContractStatusSchema>;
+export type ContractStatus = ClientContractStatus;
+
+export const clientFunctionalRoleSchema = z.enum([
+  'account_manager',
+  'traffic_manager',
+  'designer',
+  'social_media',
+  'copywriter',
+  'developer',
+  'video_maker',
+]);
+export const functionalRoleSchema = clientFunctionalRoleSchema;
+export type ClientFunctionalRole = z.infer<typeof clientFunctionalRoleSchema>;
+export type FunctionalRole = ClientFunctionalRole;
+
+export const scopeCadenceSchema = z.enum([
+  'one_off',
+  'weekly',
+  'biweekly',
+  'monthly',
+  'quarterly',
+]);
+export type ScopeCadence = z.infer<typeof scopeCadenceSchema>;
+
+export const scopeCategorySchema = z.enum([
+  'traffic',
+  'social_media',
+  'design',
+  'web',
+  'copy',
+  'video',
+  'crm',
+  'general',
+]);
+export type ScopeCategory = z.infer<typeof scopeCategorySchema>;
+
+export const clientUrlSchema = z.string().trim().url().max(2048).refine((val) => {
+  try {
+    const parsed = new URL(val);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return false;
+    if (parsed.username || parsed.password) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}, { message: 'URL deve utilizar protocolo HTTP/HTTPS e não conter credenciais embutidas' });
 
 export const clientSchema = z.object({
   id: z.string().uuid(),
@@ -39,6 +117,14 @@ export const clientSchema = z.object({
   email: z.string().trim().email().max(254).toLowerCase().nullable(),
   phone: z.string().trim().max(40).nullable(),
   notes: z.string().trim().max(4000).nullable(),
+  contractStatus: clientContractStatusSchema.default('active'),
+  segment: z.string().trim().max(160).nullable().default(null),
+  accountManagerUserId: z.string().nullable().default(null),
+  briefingSummary: z.string().max(10000).default(''),
+  brandKitUrl: clientUrlSchema.nullable().default(null),
+  driveFolderUrl: clientUrlSchema.nullable().default(null),
+  activeChannels: z.array(z.string().trim().min(1).max(80)).default([]),
+  onboardingCompletedAt: z.string().datetime({ offset: true }).nullable().default(null),
   archivedAt: z.string().datetime({ offset: true }).nullable(),
   createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true }),
@@ -52,6 +138,14 @@ export const createClientSchema = z.object({
   email: z.string().trim().email().max(254).toLowerCase().nullable().optional(),
   phone: z.string().trim().max(40).nullable().optional(),
   notes: z.string().trim().max(4000).nullable().optional(),
+  contractStatus: clientContractStatusSchema.optional().default('active'),
+  segment: z.string().trim().max(160).nullable().optional(),
+  accountManagerUserId: z.string().trim().min(1).max(255).nullable().optional(),
+  briefingSummary: z.string().trim().max(10000).optional().default(''),
+  brandKitUrl: clientUrlSchema.nullable().optional(),
+  driveFolderUrl: clientUrlSchema.nullable().optional(),
+  activeChannels: z.array(z.string().trim().min(1).max(80)).max(30).optional().default([]),
+  onboardingCompletedAt: z.string().datetime({ offset: true }).nullable().optional(),
 }).strict();
 export type CreateClientInput = z.infer<typeof createClientSchema>;
 
@@ -62,6 +156,14 @@ export const updateClientSchema = z.object({
   email: z.string().trim().email().max(254).toLowerCase().nullable().optional(),
   phone: z.string().trim().max(40).nullable().optional(),
   notes: z.string().trim().max(4000).nullable().optional(),
+  contractStatus: clientContractStatusSchema.optional(),
+  segment: z.string().trim().max(160).nullable().optional(),
+  accountManagerUserId: z.string().trim().min(1).max(255).nullable().optional(),
+  briefingSummary: z.string().trim().max(10000).optional(),
+  brandKitUrl: clientUrlSchema.nullable().optional(),
+  driveFolderUrl: clientUrlSchema.nullable().optional(),
+  activeChannels: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
+  onboardingCompletedAt: z.string().datetime({ offset: true }).nullable().optional(),
 }).strict().refine((data) => Object.keys(data).some((key) => key !== 'version'), {
   message: 'Pelo menos um campo editável deve ser fornecido.',
 });
@@ -78,6 +180,7 @@ export type ClientStatusFilter = z.infer<typeof clientStatusFilterSchema>;
 export const listClientsQuerySchema = z.object({
   q: z.string().trim().max(100).optional(),
   status: clientStatusFilterSchema.default('active'),
+  contractStatus: clientContractStatusSchema.optional(),
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
@@ -95,6 +198,96 @@ export const clientListResponseSchema = z.object({
   pageSize: z.number().int().positive(),
 });
 export type ClientListResponse = z.infer<typeof clientListResponseSchema>;
+
+export const clientTeamMemberSchema = z.object({
+  clientId: z.string().uuid(),
+  userId: z.string(),
+  userName: z.string(),
+  userEmail: z.email(),
+  functionalRole: clientFunctionalRoleSchema,
+  isPrimary: z.boolean(),
+  canCreateDemands: z.boolean(),
+  assignedByUserId: z.string(),
+  assignedAt: z.string().datetime({ offset: true }),
+}).strict();
+export type ClientTeamMember = z.infer<typeof clientTeamMemberSchema>;
+
+export const upsertClientTeamMemberSchema = z.object({
+  userId: z.string().trim().min(1).max(255),
+  functionalRole: clientFunctionalRoleSchema,
+  isPrimary: z.boolean().default(false),
+  canCreateDemands: z.boolean().default(false),
+}).strict();
+export type UpsertClientTeamMemberInput = z.infer<typeof upsertClientTeamMemberSchema>;
+export const assignClientTeamMemberSchema = upsertClientTeamMemberSchema;
+export type AssignClientTeamMemberInput = UpsertClientTeamMemberInput;
+
+export const clientTeamMemberResponseSchema = z.object({
+  member: clientTeamMemberSchema,
+}).strict();
+export type ClientTeamMemberResponse = z.infer<typeof clientTeamMemberResponseSchema>;
+
+export const clientTeamListResponseSchema = z.object({
+  members: z.array(clientTeamMemberSchema),
+}).strict();
+export type ClientTeamListResponse = z.infer<typeof clientTeamListResponseSchema>;
+
+export const clientScopeItemSchema = z.object({
+  id: z.string().uuid(),
+  clientId: z.string().uuid(),
+  title: z.string().trim().min(1).max(160),
+  description: z.string().max(2000),
+  category: scopeCategorySchema,
+  cadence: scopeCadenceSchema,
+  contractedQuantity: z.number().int().positive(),
+  slaBusinessDays: z.number().int().positive().nullable(),
+  slaHours: z.number().int().positive().nullable(),
+  active: z.boolean(),
+  isActive: z.boolean(),
+  version: z.number().int().positive(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+}).strict();
+export type ClientScopeItem = z.infer<typeof clientScopeItemSchema>;
+
+export const createClientScopeItemSchema = z.object({
+  title: z.string().trim().min(1).max(160),
+  description: z.string().trim().max(2000).default(''),
+  category: scopeCategorySchema.default('general'),
+  cadence: scopeCadenceSchema.default('monthly'),
+  contractedQuantity: z.number().int().positive().default(1),
+  slaBusinessDays: z.number().int().positive().nullable().optional(),
+  slaHours: z.number().int().positive().nullable().optional(),
+  active: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+}).strict();
+export type CreateClientScopeItemInput = z.infer<typeof createClientScopeItemSchema>;
+
+export const updateClientScopeItemSchema = z.object({
+  version: z.number().int().positive(),
+  title: z.string().trim().min(1).max(160).optional(),
+  description: z.string().trim().max(2000).optional(),
+  category: scopeCategorySchema.optional(),
+  cadence: scopeCadenceSchema.optional(),
+  contractedQuantity: z.number().int().positive().optional(),
+  slaBusinessDays: z.number().int().positive().nullable().optional(),
+  slaHours: z.number().int().positive().nullable().optional(),
+  active: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+}).strict().refine((data) => Object.keys(data).some((key) => key !== 'version'), {
+  message: 'Pelo menos um campo editável deve ser fornecido.',
+});
+export type UpdateClientScopeItemInput = z.infer<typeof updateClientScopeItemSchema>;
+
+export const clientScopeItemResponseSchema = z.object({
+  scopeItem: clientScopeItemSchema,
+}).strict();
+export type ClientScopeItemResponse = z.infer<typeof clientScopeItemResponseSchema>;
+
+export const clientScopeListResponseSchema = z.object({
+  scopeItems: z.array(clientScopeItemSchema),
+}).strict();
+export type ClientScopeListResponse = z.infer<typeof clientScopeListResponseSchema>;
 
 // ==========================================
 // FASE 3: DEMANDAS E TAREFAS
@@ -183,7 +376,7 @@ export const taskSchema = z.object({
   completedAt: z.string().datetime({ offset: true }).nullable(),
   pauseRequestedAt: z.string().datetime({ offset: true }).nullable(),
   pauseReason: z.string().max(1000).nullable(),
-  deliveryNotes: z.string().max(3000).nullable(),
+  deliveryNotes: z.string().max(2_500_000).nullable(),
   previewUrl: previewUrlSchema.nullable(),
   version: z.number().int().positive(),
   createdAt: z.string().datetime({ offset: true }),
@@ -213,7 +406,7 @@ export const taskCommentSchema = z.object({
   taskId: z.string().uuid(),
   authorId: z.string(),
   authorName: z.string(),
-  content: z.string().min(1).max(4000),
+  content: z.string().min(1).max(2_500_000),
   createdAt: z.string().datetime({ offset: true }),
 }).strict();
 export type TaskComment = z.infer<typeof taskCommentSchema>;
@@ -306,7 +499,7 @@ export type RemoveDependencyInput = z.infer<typeof removeDependencySchema>;
 
 export const submitTaskReviewSchema = z.object({
   version: z.number().int().positive(),
-  deliveryNotes: z.string().trim().min(1).max(3000),
+  deliveryNotes: z.string().trim().min(1).max(2_500_000),
   previewUrl: previewUrlSchema.optional().nullable(),
 }).strict();
 export type SubmitTaskReviewInput = z.infer<typeof submitTaskReviewSchema>;
@@ -314,7 +507,7 @@ export type SubmitTaskReviewInput = z.infer<typeof submitTaskReviewSchema>;
 export const reviewTaskSchema = z.object({
   version: z.number().int().positive(),
   decision: z.enum(['complete', 'changes_requested']),
-  feedback: z.string().trim().min(1).max(3000),
+  feedback: z.string().trim().min(1).max(2_500_000),
 }).strict();
 export type ReviewTaskInput = z.infer<typeof reviewTaskSchema>;
 
@@ -332,7 +525,7 @@ export const approveTaskPauseSchema = z.object({
 export type ApproveTaskPauseInput = z.infer<typeof approveTaskPauseSchema>;
 
 export const createTaskCommentSchema = z.object({
-  content: z.string().trim().min(1).max(4000),
+  content: z.string().trim().min(1).max(2_500_000),
 }).strict();
 export type CreateTaskCommentInput = z.infer<typeof createTaskCommentSchema>;
 
@@ -700,6 +893,8 @@ export const identityEventActionSchema = z.enum([
   'user_deactivated',
   'role_permissions_changed',
   'password_recovered',
+  'profile_updated',
+  'password_changed',
 ]);
 export type IdentityEventAction = z.infer<typeof identityEventActionSchema>;
 
@@ -754,6 +949,20 @@ export const identityEventSchema = z.discriminatedUnion('action', [
   z.object({
     ...identityEventBase,
     action: z.literal('password_recovered'),
+    actorId: identityUserIdSchema,
+    targetUserId: identityUserIdSchema,
+    revokedCount: z.number().int().nonnegative(),
+  }).strict(),
+  z.object({
+    ...identityEventBase,
+    action: z.literal('profile_updated'),
+    actorId: identityUserIdSchema,
+    targetUserId: identityUserIdSchema,
+    revokedCount: z.number().int().nonnegative(),
+  }).strict(),
+  z.object({
+    ...identityEventBase,
+    action: z.literal('password_changed'),
     actorId: identityUserIdSchema,
     targetUserId: identityUserIdSchema,
     revokedCount: z.number().int().nonnegative(),
@@ -1020,5 +1229,132 @@ export const bottlenecksReportResponseSchema = z.object({
 }).strict();
 export type BottlenecksReportResponse = z.infer<typeof bottlenecksReportResponseSchema>;
 
+// ==========================================
+// FASE 10: BACKUPS & GOOGLE DRIVE (RCLONE CRYPT)
+// ==========================================
 
+export const backupFileItemSchema = z.object({
+  file: z.string(),
+  sha256: z.string(),
+  sizeBytes: z.number().int().nonnegative(),
+  createdAt: z.string().nullable().optional(),
+}).strict();
+export type BackupFileItem = z.infer<typeof backupFileItemSchema>;
 
+export const backupStatusResponseSchema = z.object({
+  ok: z.boolean(),
+  stage: z.string(),
+  lastStageFailed: z.string().nullable().optional(),
+  stamp: z.string().nullable(),
+  latestFile: z.string().nullable(),
+  ageSec: z.number().nullable(),
+  rpoSec: z.number().int().positive(),
+  retentionDays: z.number().int().positive(),
+  retentionMode: z.string(),
+  driveConfigured: z.boolean(),
+  dryRun: z.boolean(),
+  driveFolder: z.string(),
+  remoteName: z.string(),
+  schedule: z.string(),
+  files: z.array(backupFileItemSchema),
+  totalBytes: z.number().int().nonnegative(),
+}).strict();
+export type BackupStatusResponse = z.infer<typeof backupStatusResponseSchema>;
+
+export const triggerBackupResponseSchema = z.object({
+  success: z.boolean(),
+  stamp: z.string(),
+  file: z.string(),
+  sha256: z.string(),
+  sizeBytes: z.number().int().nonnegative(),
+  driveUploaded: z.boolean(),
+  driveMode: z.enum(['uploaded', 'dryrun', 'local_only']),
+  message: z.string(),
+  status: backupStatusResponseSchema,
+}).strict();
+export type TriggerBackupResponse = z.infer<typeof triggerBackupResponseSchema>;
+
+// ==========================================
+// FASE 6 & FASE 9: COFRE DE CREDENCIAIS (AES-256-GCM) & AGENTE HERMES
+// ==========================================
+
+export const clientCredentialCategorySchema = z.enum([
+  'hosting',
+  'domain',
+  'cms',
+  'ads',
+  'social',
+  'analytics',
+  'email',
+  'database',
+  'other',
+]);
+export type ClientCredentialCategory = z.infer<typeof clientCredentialCategorySchema>;
+
+export const clientCredentialSchema = z.object({
+  id: z.string().uuid(),
+  clientId: z.string().uuid(),
+  clientName: z.string().optional(),
+  category: clientCredentialCategorySchema,
+  label: z.string(),
+  serviceUrl: z.string().nullable(),
+  username: z.string(),
+  secretPreview: z.string(),
+  notes: z.string().nullable(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string(),
+  updatedByName: z.string().nullable().optional(),
+}).strict();
+export type ClientCredential = z.infer<typeof clientCredentialSchema>;
+
+export const clientCredentialListResponseSchema = z.object({
+  credentials: z.array(clientCredentialSchema),
+}).strict();
+export type ClientCredentialListResponse = z.infer<typeof clientCredentialListResponseSchema>;
+
+export const clientCredentialSecretResponseSchema = z.object({
+  id: z.string().uuid(),
+  clientId: z.string().uuid(),
+  clientName: z.string().optional(),
+  category: clientCredentialCategorySchema.optional(),
+  label: z.string(),
+  serviceUrl: z.string().nullable(),
+  username: z.string(),
+  secret: z.string(),
+  notes: z.string().nullable(),
+}).strict();
+export type ClientCredentialSecretResponse = z.infer<typeof clientCredentialSecretResponseSchema>;
+
+export const createClientCredentialSchema = z.object({
+  clientId: z.string().uuid(),
+  category: clientCredentialCategorySchema.default('hosting'),
+  label: z.string().trim().min(2).max(100),
+  serviceUrl: z.string().trim().max(500).nullable().optional(),
+  username: z.string().trim().min(1).max(160),
+  secret: z.string().min(1).max(500),
+  notes: z.string().trim().max(1000).nullable().optional(),
+}).strict();
+export type CreateClientCredentialInput = z.infer<typeof createClientCredentialSchema>;
+
+export const updateClientCredentialSchema = z.object({
+  category: clientCredentialCategorySchema.optional(),
+  label: z.string().trim().min(2).max(100).optional(),
+  serviceUrl: z.string().trim().max(500).nullable().optional(),
+  username: z.string().trim().min(1).max(160).optional(),
+  secret: z.string().min(1).max(500).optional(),
+  notes: z.string().trim().max(1000).nullable().optional(),
+}).strict();
+export type UpdateClientCredentialInput = z.infer<typeof updateClientCredentialSchema>;
+
+export const hermesStatusResponseSchema = z.object({
+  installed: z.boolean(),
+  version: z.string(),
+  omnirouteUrl: z.string(),
+  omnirouteHealthy: z.boolean(),
+  whatsappConfigured: z.boolean(),
+  skillInstalled: z.boolean(),
+  totalCredentials: z.number().int().nonnegative(),
+  totalClients: z.number().int().nonnegative(),
+  capabilities: z.array(z.string()),
+}).strict();
+export type HermesStatusResponse = z.infer<typeof hermesStatusResponseSchema>;

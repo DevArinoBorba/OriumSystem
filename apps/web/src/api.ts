@@ -1,4 +1,5 @@
 import {
+  backupStatusResponseSchema,
   clientListResponseSchema,
   clientResponseSchema,
   clientTimelineResponseSchema,
@@ -23,10 +24,23 @@ import {
   taskCommentsResponseSchema,
   taskDetailResponseSchema,
   taskResponseSchema,
+  triggerBackupResponseSchema,
+  clientCredentialSchema,
+  clientCredentialListResponseSchema,
+  clientCredentialSecretResponseSchema,
+  hermesStatusResponseSchema,
   type AddDependencyInput,
   type ApproveTaskPauseInput,
+  type BackupStatusResponse,
   type BottlenecksReportResponse,
+  type TriggerBackupResponse,
   type Client,
+  type ClientCredential,
+  type ClientCredentialListResponse,
+  type ClientCredentialSecretResponse,
+  type CreateClientCredentialInput,
+  type UpdateClientCredentialInput,
+  type HermesStatusResponse,
   type ClientListResponse,
   type ClientTimelineQuery,
   type ClientTimelineResponse,
@@ -69,7 +83,9 @@ import {
   type UpdateDemandInput,
   type UpdateDemandTemplateInput,
   type UpdateMaterialInput,
+  type UpdateProfileInput,
   type UpdateRequirementInput,
+  type ChangePasswordInput,
 } from '@orium/contracts';
 import type { UserListItem } from './types.js';
 
@@ -142,8 +158,20 @@ async function request<T>(
   });
 
   if (response.status === 401) {
-    onUnauthorized();
-    throw new ApiError(401, 'UNAUTHENTICATED', 'Sessão expirada ou não autenticada.');
+    let errorCode = 'UNAUTHENTICATED';
+    try {
+      const errorJson = (await response.json()) as { error?: { code?: string } };
+      if (errorJson?.error?.code) {
+        errorCode = errorJson.error.code;
+      }
+    } catch {
+      // Body is not JSON
+    }
+    if (errorCode === 'UNAUTHENTICATED') {
+      onUnauthorized();
+      throw new ApiError(401, 'UNAUTHENTICATED', 'Sessão expirada ou não autenticada.');
+    }
+    throw new ApiError(401, errorCode);
   }
 
   if (!response.ok) {
@@ -178,6 +206,37 @@ export const api = {
       { method: 'GET', signal },
       onUnauthorized,
       (raw) => sessionResponseSchema.parse(raw),
+    ),
+
+  updateProfile: (
+    data: UpdateProfileInput,
+    signal: AbortSignal,
+    onUnauthorized: () => void,
+  ): Promise<SessionResponse> =>
+    request(
+      '/api/v1/me',
+      { method: 'PATCH', body: JSON.stringify(data), signal },
+      onUnauthorized,
+      (raw) => sessionResponseSchema.parse(raw),
+    ),
+
+  changePassword: (
+    data: ChangePasswordInput,
+    signal: AbortSignal,
+    onUnauthorized: () => void,
+  ): Promise<{ success: boolean; revokedCount?: number }> =>
+    request(
+      '/api/v1/me/password',
+      { method: 'POST', body: JSON.stringify(data), signal },
+      onUnauthorized,
+      (raw) => {
+        const base = parseSuccessResponse(raw);
+        const revokedCount =
+          typeof (raw as Record<string, unknown>).revokedCount === 'number'
+            ? ((raw as Record<string, unknown>).revokedCount as number)
+            : undefined;
+        return { ...base, revokedCount };
+      },
     ),
 
   signIn: async (
@@ -899,5 +958,108 @@ export const api = {
       { method: 'GET', signal },
       onUnauthorized,
       (raw) => bottlenecksReportResponseSchema.parse(raw),
+    ),
+
+  // ================= Fase 10 — Backups & Google Drive =================
+
+  getBackupStatus: (
+    signal: AbortSignal,
+    onUnauthorized: () => void,
+  ): Promise<BackupStatusResponse> =>
+    request(
+      '/api/v1/backups/status',
+      { method: 'GET', signal },
+      onUnauthorized,
+      (raw) => backupStatusResponseSchema.parse(raw),
+    ),
+
+  triggerBackup: (
+    signal: AbortSignal,
+    onUnauthorized: () => void,
+  ): Promise<TriggerBackupResponse> =>
+    request(
+      '/api/v1/backups/run',
+      { method: 'POST', body: '{}', signal },
+      onUnauthorized,
+      (raw) => triggerBackupResponseSchema.parse(raw),
+    ),
+
+  // ================= Cofre de Credenciais & Hermes Agent =================
+
+  getHermesStatus: (
+    signal: AbortSignal,
+    onUnauthorized: () => void,
+  ): Promise<HermesStatusResponse> =>
+    request(
+      '/api/v1/hermes/status',
+      { method: 'GET', signal },
+      onUnauthorized,
+      (raw) => hermesStatusResponseSchema.parse(raw),
+    ),
+
+  listClientCredentials: (
+    params: { clientId?: string; search?: string },
+    signal: AbortSignal,
+    onUnauthorized: () => void,
+  ): Promise<ClientCredentialListResponse> => {
+    const query = new URLSearchParams();
+    if (params.clientId) query.set('clientId', params.clientId);
+    if (params.search) query.set('search', params.search);
+    const qs = query.toString();
+    return request(
+      `/api/v1/vault/credentials${qs ? `?${qs}` : ''}`,
+      { method: 'GET', signal },
+      onUnauthorized,
+      (raw) => clientCredentialListResponseSchema.parse(raw),
+    );
+  },
+
+  createClientCredential: (
+    data: CreateClientCredentialInput,
+    signal: AbortSignal,
+    onUnauthorized: () => void,
+  ): Promise<ClientCredential> =>
+    request(
+      '/api/v1/vault/credentials',
+      { method: 'POST', body: JSON.stringify(data), signal },
+      onUnauthorized,
+      (raw) => clientCredentialSchema.parse(raw),
+    ),
+
+  updateClientCredential: (
+    id: string,
+    data: UpdateClientCredentialInput,
+    signal: AbortSignal,
+    onUnauthorized: () => void,
+  ): Promise<ClientCredential> =>
+    request(
+      `/api/v1/vault/credentials/${id}`,
+      { method: 'PATCH', body: JSON.stringify(data), signal },
+      onUnauthorized,
+      (raw) => clientCredentialSchema.parse(raw),
+    ),
+
+  revealClientCredentialSecret: (
+    id: string,
+    signal: AbortSignal,
+    onUnauthorized: () => void,
+  ): Promise<ClientCredentialSecretResponse> =>
+    request(
+      `/api/v1/vault/credentials/${id}/reveal`,
+      { method: 'GET', signal },
+      onUnauthorized,
+      (raw) => clientCredentialSecretResponseSchema.parse(raw),
+    ),
+
+  deleteClientCredential: (
+    id: string,
+    signal: AbortSignal,
+    onUnauthorized: () => void,
+  ): Promise<{ deleted: true }> =>
+    request(
+      `/api/v1/vault/credentials/${id}`,
+      { method: 'DELETE', body: '{}', signal },
+      onUnauthorized,
+      () => ({ deleted: true as const }),
     ),
 };

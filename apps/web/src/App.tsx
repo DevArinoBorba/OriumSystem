@@ -3,13 +3,16 @@ import type { SessionResponse } from '@orium/contracts';
 import { api, ApiError } from './api.js';
 import { Header } from './components/Header.js';
 import { LoginView } from './components/LoginView.js';
+import { BackupsView } from './components/BackupsView.js';
 import { ClientsView } from './components/ClientsView.js';
 import { DashboardView } from './components/DashboardView.js';
 import { DemandsView } from './components/DemandsView.js';
 import { MaterialsView } from './components/MaterialsView.js';
 import { NotificationsView } from './components/NotificationsView.js';
+import { ProfileView } from './components/ProfileView.js';
 import { ReportsView } from './components/ReportsView.js';
 import { TeamView } from './components/TeamView.js';
+import { VaultView } from './components/VaultView.js';
 import type { ActiveTab, MaterialNavigationTarget } from './types.js';
 
 type ViewState = 'checking' | 'signed-out' | 'signed-in';
@@ -30,6 +33,17 @@ export function App() {
   const [signOutError, setSignOutError] = useState<string | null>(null);
   const activeRequestRef = useRef<AbortController | null>(null);
   const unreadRequestRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const onSessionUpdated = (event: Event) => {
+      const custom = event as CustomEvent<SessionResponse>;
+      if (custom.detail) {
+        setSession(custom.detail);
+      }
+    };
+    window.addEventListener('orium:session-updated', onSessionUpdated);
+    return () => window.removeEventListener('orium:session-updated', onSessionUpdated);
+  }, []);
 
   const handleUnauthorized = useCallback(() => {
     setSession(null);
@@ -193,6 +207,7 @@ export function App() {
     return <LoginView onSuccess={handleLoginSuccess} activeRequestRef={activeRequestRef} />;
   }
 
+  const isAdmin = session.roles.includes('administrator');
   const hasClientsRead = session.permissions.includes('clients.read');
   const hasUsersRead = session.permissions.includes('users.read');
   const hasDemandsRead = session.permissions.includes('demands.read');
@@ -253,7 +268,7 @@ export function App() {
           />
         )}
 
-        {activeTab === 'reports' && hasDemandsRead && (
+        {activeTab === 'reports' && isAdmin && hasDemandsRead && (
           <ReportsView
             session={session}
             onUnauthorized={handleUnauthorized}
@@ -282,8 +297,20 @@ export function App() {
           <TeamView session={session} onUnauthorized={handleUnauthorized} />
         )}
 
+        {activeTab === 'vault' && isAdmin && (
+          <VaultView onUnauthorized={handleUnauthorized} />
+        )}
+
+        {activeTab === 'backups' && isAdmin && (
+          <BackupsView session={session} onUnauthorized={handleUnauthorized} />
+        )}
+
+        {activeTab === 'profile' && (
+          <ProfileView session={session} onUnauthorized={handleUnauthorized} />
+        )}
+
         {/* Fallback if user lacks permissions for all tabs */}
-        {!hasClientsRead && !hasDemandsRead && !hasUsersRead && !hasMaterialsRead && (
+        {activeTab !== 'profile' && !hasClientsRead && !hasDemandsRead && !hasUsersRead && !hasMaterialsRead && (
           <section className="view-panel" aria-labelledby="no-perm-heading">
             <h1 id="no-perm-heading">Área protegida</h1>
             <p className="panel-subtitle">

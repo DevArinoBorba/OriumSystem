@@ -1665,7 +1665,7 @@ export function MaterialsView({
               <button
                 key={s}
                 type="button"
-                className={`filter-btn ${statusFilter === s ? 'active' : ''}`}
+                className={`filter-button filter-btn ${statusFilter === s ? 'active' : ''}`}
                 onClick={() => {
                   setStatusFilter(s);
                   setPage(1);
@@ -1681,7 +1681,7 @@ export function MaterialsView({
             <span className="filter-label">Categoria:</span>
             <button
               type="button"
-              className={`filter-btn ${categoryFilter === 'all' ? 'active' : ''}`}
+              className={`filter-button filter-btn ${categoryFilter === 'all' ? 'active' : ''}`}
               onClick={() => {
                 setCategoryFilter('all');
                 setPage(1);
@@ -1694,7 +1694,7 @@ export function MaterialsView({
               <button
                 key={cat}
                 type="button"
-                className={`filter-btn ${categoryFilter === cat ? 'active' : ''}`}
+                className={`filter-button filter-btn ${categoryFilter === cat ? 'active' : ''}`}
                 onClick={() => {
                   setCategoryFilter(cat);
                   setPage(1);

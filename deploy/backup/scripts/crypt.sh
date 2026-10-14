@@ -44,8 +44,9 @@ fi
 
 echo "crypt: verificando remote $REMOTE (scope drive.file)..."
 ${RCLONE} "${CONFIG_ARGS[@]}" "${PWC_ARGS[@]}" lsf "$REMOTE:" >/dev/null 2>&1 \
-  && echo "crypt: remote $REMOTE acessível" \
+  || ${RCLONE} "${CONFIG_ARGS[@]}" "${PWC_ARGS[@]}" mkdir "$REMOTE:/$DRIVEFOLDER" >/dev/null 2>&1 \
   || { echo "crypt: remote '$REMOTE' não acessível/configurado (fail-closed)" >&2; exit 3; }
+echo "crypt: remote $REMOTE acessível"
 
 # Prova real de criptografia local: copia(criptografa) os dumps da pasta local para o
 # remote crypt e depois cryptcheck (integridade). Nada é enviado ao Drive aqui.

@@ -1,7 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { hashPassword } from 'better-auth/crypto';
+import { hashPassword, verifyPassword } from 'better-auth/crypto';
 import { eq } from 'drizzle-orm';
-import { createUserSchema, permissionSchema, roleSchema, type Permission, type SessionResponse } from '@orium/contracts';
+import {
+  changePasswordSchema,
+  createUserSchema,
+  permissionSchema,
+  roleSchema,
+  updateProfileSchema,
+  type Permission,
+  type SessionResponse,
+} from '@orium/contracts';
 import type { Database } from './db.js';
 import type { Auth } from './auth.js';
 import { fromNodeHeaders } from 'better-auth/node';
@@ -58,7 +66,7 @@ export async function provisionUser(database: Database, input: unknown, actorId?
 }
 
 export async function publicIdentity(database: Database, id: string): Promise<SessionResponse> {
-  const [identity] = await database.db.select({ id: schema.user.id, name: schema.user.name, email: schema.user.email, active: schema.user.active })
+  const [identity] = await database.db.select({ id: schema.user.id, name: schema.user.name, email: schema.user.email, image: schema.user.image, active: schema.user.active })
     .from(schema.user).where(eq(schema.user.id, id));
   if (!identity?.active) throw new AppError(401, 'UNAUTHENTICATED');
   const memberships = await database.db.select({ role: schema.userRole.roleId })
@@ -67,7 +75,12 @@ export async function publicIdentity(database: Database, id: string): Promise<Se
     .from(schema.rolePermission).innerJoin(schema.userRole, eq(schema.userRole.roleId, schema.rolePermission.roleId))
     .where(eq(schema.userRole.userId, id));
   return {
-    user: { id: identity.id, name: identity.name, email: identity.email },
+    user: {
+      id: identity.id,
+      name: identity.name,
+      email: identity.email,
+      ...(identity.image ? { image: identity.image } : {}),
+    },
     roles: memberships.flatMap((item) => { const parsed = roleSchema.safeParse(item.role); return parsed.success ? [parsed.data] : []; }),
     permissions: [...new Set(grants.flatMap((item) => { const parsed = permissionSchema.safeParse(item.permission); return parsed.success ? [parsed.data] : []; }))],
   };
@@ -75,7 +88,7 @@ export async function publicIdentity(database: Database, id: string): Promise<Se
 
 export const adminPermissions: Permission[] = [
   'users.read', 'users.create', 'users.deactivate', 'roles.manage',
-  'clients.write', 'clients.archive',
+  'clients.write', 'clients.manage', 'clients.team.manage', 'clients.archive',
   'demands.write', 'tasks.manage', 'tasks.review',
   'materials.archive',
 ];
@@ -162,6 +175,7 @@ export async function changeRolePermissions(database: Database, actorId: string,
     if (parsedRole === 'administrator' && all.some((item) => !permissions.includes(item))) throw new AppError(409, 'ADMIN_PERMISSIONS_REQUIRED');
     const collaboratorAllowed: Permission[] = [
       'protected.read',
+      'clients.read.assigned',
       'demands.read',
       'tasks.read',
       'tasks.execute',
@@ -197,5 +211,148 @@ export async function changeRolePermissions(database: Database, actorId: string,
       try { await client.query('ROLLBACK'); } catch { /* connection already broken */ }
       throw error;
     } finally { client.release(); }
+  });
+}
+
+export async function updateOwnProfile(
+  database: Database,
+  userId: string,
+  rawInput: unknown,
+): Promise<SessionResponse & { id: string; name: string; email: string; image: string | null }> {
+  const input = updateProfileSchema.parse(rawInput);
+  return serializeIdentity(database, async () => {
+    const client = await database.pool.connect();
+    let inTransaction = false;
+    try {
+      await client.query('BEGIN');
+      inTransaction = true;
+      await client.query('SELECT pg_advisory_xact_lock($1)', [IDENTITY_LOCK]);
+
+      const current = await client.query<{ id: string; active: boolean; image: string | null }>(
+        'SELECT id, active, image FROM auth_user WHERE id = $1 FOR UPDATE',
+        [userId],
+      );
+      const userRow = current.rows[0];
+      if (!userRow?.active) throw new AppError(401, 'UNAUTHENTICATED');
+
+      const nextImage = input.image !== undefined ? input.image : userRow.image;
+
+      await client.query(
+        `UPDATE auth_user
+         SET name = $1, image = $2, updated_at = now()
+         WHERE id = $3`,
+        [input.name.trim(), nextImage, userId],
+      );
+
+      await recordIdentityEvent(
+        client,
+        { action: 'profile_updated', actorId: userId, targetUserId: userId, revokedCount: 0 },
+        [userId],
+      );
+
+      await client.query('COMMIT');
+      inTransaction = false;
+    } catch (error) {
+      if (inTransaction) {
+        try { await client.query('ROLLBACK'); } catch { /* connection already broken */ }
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    const identity = await publicIdentity(database, userId);
+    const [imgRow] = await database.db
+      .select({ image: schema.user.image })
+      .from(schema.user)
+      .where(eq(schema.user.id, userId));
+    const image = imgRow?.image ?? null;
+    return {
+      ...identity,
+      id: identity.user.id,
+      name: identity.user.name,
+      email: identity.user.email,
+      image,
+      user: {
+        ...identity.user,
+        ...(image ? { image } : {}),
+      },
+    };
+  });
+}
+
+export async function changeOwnPassword(
+  database: Database,
+  userId: string,
+  currentSessionId: string,
+  rawInput: unknown,
+): Promise<{ success: true; revokedCount: number }> {
+  const input = changePasswordSchema.parse(rawInput);
+  return serializeIdentity(database, async () => {
+    const client = await database.pool.connect();
+    let inTransaction = false;
+    try {
+      await client.query('BEGIN');
+      inTransaction = true;
+      await client.query('SELECT pg_advisory_xact_lock($1)', [IDENTITY_LOCK]);
+
+      const userResult = await client.query<{ id: string; active: boolean }>(
+        'SELECT id, active FROM auth_user WHERE id = $1 FOR UPDATE',
+        [userId],
+      );
+      const userRow = userResult.rows[0];
+      if (!userRow?.active) throw new AppError(401, 'UNAUTHENTICATED');
+
+      const accountResult = await client.query<{ id: string; password: string | null }>(
+        `SELECT id, password
+         FROM auth_account
+         WHERE user_id = $1 AND provider_id = 'credential'
+         FOR UPDATE`,
+        [userId],
+      );
+      if ((accountResult.rowCount ?? 0) !== 1 || !accountResult.rows[0]?.password) {
+        throw new AppError(400, 'CREDENTIAL_NOT_FOUND');
+      }
+
+      const isCurrentValid = await verifyPassword({
+        hash: accountResult.rows[0].password,
+        password: input.currentPassword,
+      });
+      if (!isCurrentValid) {
+        throw new AppError(401, 'INVALID_CREDENTIALS');
+      }
+
+      const newHash = await hashPassword(input.newPassword);
+      await client.query(
+        `UPDATE auth_account
+         SET password = $1, updated_at = now()
+         WHERE id = $2`,
+        [newHash, accountResult.rows[0].id],
+      );
+
+      const revoked = await client.query(
+        `DELETE FROM auth_session
+         WHERE user_id = $1 AND id <> $2`,
+        [userId, currentSessionId],
+      );
+      const revokedCount = revoked.rowCount ?? 0;
+
+      await recordIdentityEvent(
+        client,
+        { action: 'password_changed', actorId: userId, targetUserId: userId, revokedCount },
+        [userId],
+      );
+
+      await client.query('COMMIT');
+      inTransaction = false;
+      return { success: true, revokedCount };
+    } catch (error) {
+      if (inTransaction) {
+        try { await client.query('ROLLBACK'); } catch { /* connection already broken */ }
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
   });
 }

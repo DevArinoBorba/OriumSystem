@@ -1,4 +1,6 @@
 import type {
+  BackupFileItem,
+  BackupStatusResponse,
   BottlenecksReportResponse,
   Client,
   ClientTimelineEvent,
@@ -36,8 +38,18 @@ import type {
   SessionResponse,
   Task,
   TimelineEventSource,
+  TriggerBackupResponse,
   UpdateDemandTemplateInput,
   UpdateMaterialInput,
+  UpdateProfileInput,
+  ChangePasswordInput,
+  ClientCredential,
+  ClientCredentialCategory,
+  ClientCredentialListResponse,
+  ClientCredentialSecretResponse,
+  CreateClientCredentialInput,
+  UpdateClientCredentialInput,
+  HermesStatusResponse,
 } from '@orium/contracts';
 
 export type ActiveTab =
@@ -47,14 +59,25 @@ export type ActiveTab =
   | 'demands'
   | 'materials'
   | 'notifications'
-  | 'reports';
+  | 'reports'
+  | 'backups'
+  | 'vault'
+  | 'profile';
 
 export type {
+  BackupFileItem,
+  BackupStatusResponse,
   BottlenecksReportResponse,
+  ChangePasswordInput,
   Client,
+  ClientCredential,
+  ClientCredentialCategory,
+  ClientCredentialListResponse,
+  ClientCredentialSecretResponse,
   ClientTimelineEvent,
   ClientTimelineQuery,
   ClientTimelineResponse,
+  CreateClientCredentialInput,
   CreateDemandTemplateInput,
   CreateMaterialInput,
   DashboardItem,
@@ -67,6 +90,7 @@ export type {
   DashboardWorkloadUser,
   Demand,
   DemandTemplate,
+  HermesStatusResponse,
   InstantiateDemandTemplateInput,
   ListMaterialTargetsQuery,
   ListMaterialTargetsResponse,
@@ -87,8 +111,11 @@ export type {
   SessionResponse,
   Task,
   TimelineEventSource,
+  TriggerBackupResponse,
+  UpdateClientCredentialInput,
   UpdateDemandTemplateInput,
   UpdateMaterialInput,
+  UpdateProfileInput,
 };
 
 export type DashboardScope = DashboardResponse['scope'];

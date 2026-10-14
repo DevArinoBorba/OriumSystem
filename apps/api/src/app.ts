@@ -11,6 +11,10 @@ import {
   updateClientSchema,
   clientVersionSchema,
   listClientsQuerySchema,
+  upsertClientTeamMemberSchema,
+  createClientScopeItemSchema,
+  updateClientScopeItemSchema,
+  clientFunctionalRoleSchema,
   createDemandSchema,
   updateDemandSchema,
   completeDemandSchema,
@@ -39,12 +43,44 @@ import {
   updateDemandTemplateInputSchema,
   instantiateDemandTemplateInputSchema,
   reportQuerySchema,
+  updateProfileSchema,
+  changePasswordSchema,
+  createClientCredentialSchema,
+  updateClientCredentialSchema,
 } from '@orium/contracts';
 import type { Config } from './config.js';
 import { assertApplicationDatabase, type Database } from './db.js';
 import { createAuth } from './auth.js';
-import { authenticate, authenticateInternal, changeIdentity, changeRolePermissions, listUsers, provisionUser, publicIdentity, requirePermission, IDENTITY_LOCK, serializeIdentity } from './identity.js';
-import { listClients, getClientById, createClient, updateClient, archiveClient, restoreClient } from './clients.js';
+import {
+  authenticate,
+  authenticateInternal,
+  changeIdentity,
+  changeOwnPassword,
+  changeRolePermissions,
+  listUsers,
+  provisionUser,
+  publicIdentity,
+  requirePermission,
+  updateOwnProfile,
+  IDENTITY_LOCK,
+  serializeIdentity,
+} from './identity.js';
+import {
+  listClients,
+  getClientById,
+  createClient,
+  updateClient,
+  archiveClient,
+  restoreClient,
+  resolveClientReadScope,
+  listClientTeamMembers,
+  upsertClientTeamMember,
+  removeClientTeamMember,
+  listClientScopeItems,
+  createClientScopeItem,
+  updateClientScopeItem,
+  deleteClientScopeItem,
+} from './clients.js';
 import { listIdentityEvents } from './identity-audit.js';
 import { listNotifications, markNotificationAsRead } from './notifications.js';
 import {
@@ -55,6 +91,15 @@ import {
   instantiateDemandTemplate,
 } from './templates.js';
 import { getProductivityReport, getBottlenecksReport } from './reports.js';
+import { getBackupStatus, triggerBackup } from './backups.js';
+import {
+  listClientCredentials,
+  createClientCredential,
+  updateClientCredential,
+  revealClientCredentialSecret,
+  deleteClientCredential,
+  getHermesStatus,
+} from './vault.js';
 import {
   listDemands,
   createDemand,
@@ -199,6 +244,19 @@ export async function buildApp({ config, database, logger }: Options) {
     requirePermission(identity, 'protected.read');
     return identity;
   });
+  app.patch('/api/v1/me', { bodyLimit: 1048576 }, async (request) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'protected.read');
+    const input = updateProfileSchema.parse(request.body);
+    return updateOwnProfile(database, identity.user.id, input);
+  });
+  app.post('/api/v1/me/password', async (request) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'protected.read');
+    const sessionAuth = await authenticateInternal(database, auth, request.headers);
+    const input = changePasswordSchema.parse(request.body);
+    return changeOwnPassword(database, identity.user.id, sessionAuth.sessionId, input);
+  });
   app.get('/api/v1/identity-events', async (request) => {
     const identity = await authenticate(database, auth, request.headers);
     return listIdentityEvents(database, identity, request.query);
@@ -241,50 +299,129 @@ export async function buildApp({ config, database, logger }: Options) {
     await changeRolePermissions(database, identity.user.id, params.role, rolePermissionsSchema.parse(request.body).permissions);
     return { success: true };
   });
-  app.get('/api/v1/clients', async (request) => {
-    const identity = await authenticate(database, auth, request.headers);
-    requirePermission(identity, 'clients.read');
-    const query = listClientsQuerySchema.parse(request.query);
-    return listClients(database, query);
-  });
-  app.get('/api/v1/clients/:id', async (request) => {
-    const identity = await authenticate(database, auth, request.headers);
-    requirePermission(identity, 'clients.read');
-    const params = z.object({ id: z.string().uuid() }).parse(request.params);
-    const client = await getClientById(database, params.id);
-    return { client };
-  });
-  app.post('/api/v1/clients', async (request, reply) => {
-    const identity = await authenticate(database, auth, request.headers);
-    requirePermission(identity, 'clients.write');
-    const input = createClientSchema.parse(request.body);
-    const client = await createClient(database, identity, input);
-    return reply.code(201).send({ client });
-  });
-  app.patch('/api/v1/clients/:id', async (request) => {
-    const identity = await authenticate(database, auth, request.headers);
-    requirePermission(identity, 'clients.write');
-    const params = z.object({ id: z.string().uuid() }).parse(request.params);
-    const input = updateClientSchema.parse(request.body);
-    const client = await updateClient(database, identity, params.id, input);
-    return { client };
-  });
-  app.post('/api/v1/clients/:id/archive', async (request) => {
-    const identity = await authenticate(database, auth, request.headers);
-    requirePermission(identity, 'clients.archive');
-    const params = z.object({ id: z.string().uuid() }).parse(request.params);
-    const input = clientVersionSchema.parse(request.body);
-    const client = await archiveClient(database, identity, params.id, input.version);
-    return { client };
-  });
-  app.post('/api/v1/clients/:id/restore', async (request) => {
-    const identity = await authenticate(database, auth, request.headers);
-    requirePermission(identity, 'clients.archive');
-    const params = z.object({ id: z.string().uuid() }).parse(request.params);
-    const input = clientVersionSchema.parse(request.body);
-    const client = await restoreClient(database, identity, params.id, input.version);
-    return { client };
-  });
+  for (const prefix of ['/api/v1/clients', '/api/clients'] as const) {
+    app.get(prefix, async (request) => {
+      const identity = await authenticate(database, auth, request.headers);
+      resolveClientReadScope(identity);
+      const query = listClientsQuerySchema.parse(request.query);
+      return listClients(database, query, identity);
+    });
+    app.get(`${prefix}/:id`, async (request) => {
+      const identity = await authenticate(database, auth, request.headers);
+      resolveClientReadScope(identity);
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      const client = await getClientById(database, params.id, identity);
+      return { client };
+    });
+    app.post(prefix, async (request, reply) => {
+      const identity = await authenticate(database, auth, request.headers);
+      requirePermission(identity, 'clients.write');
+      requirePermission(identity, 'clients.manage');
+      const input = createClientSchema.parse(request.body);
+      const client = await createClient(database, identity, input);
+      return reply.code(201).send({ client });
+    });
+    app.patch(`${prefix}/:id`, async (request) => {
+      const identity = await authenticate(database, auth, request.headers);
+      requirePermission(identity, 'clients.write');
+      requirePermission(identity, 'clients.manage');
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      const input = updateClientSchema.parse(request.body);
+      const client = await updateClient(database, identity, params.id, input);
+      return { client };
+    });
+    app.post(`${prefix}/:id/archive`, async (request) => {
+      const identity = await authenticate(database, auth, request.headers);
+      requirePermission(identity, 'clients.archive');
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      const input = clientVersionSchema.parse(request.body);
+      const client = await archiveClient(database, identity, params.id, input.version);
+      return { client };
+    });
+    app.post(`${prefix}/:id/restore`, async (request) => {
+      const identity = await authenticate(database, auth, request.headers);
+      requirePermission(identity, 'clients.archive');
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      const input = clientVersionSchema.parse(request.body);
+      const client = await restoreClient(database, identity, params.id, input.version);
+      return { client };
+    });
+
+    // Fase 2A — Alocação de Equipe (client_team_member)
+    app.get(`${prefix}/:id/team`, async (request) => {
+      const identity = await authenticate(database, auth, request.headers);
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      return listClientTeamMembers(database, identity, params.id);
+    });
+    app.post(`${prefix}/:id/team`, async (request, reply) => {
+      const identity = await authenticate(database, auth, request.headers);
+      requirePermission(identity, 'clients.team.manage');
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      const input = upsertClientTeamMemberSchema.parse(request.body);
+      const member = await upsertClientTeamMember(database, identity, params.id, input);
+      return reply.code(201).send({ member });
+    });
+    app.delete(`${prefix}/:id/team/:userId/:functionalRole`, async (request) => {
+      const identity = await authenticate(database, auth, request.headers);
+      requirePermission(identity, 'clients.team.manage');
+      const params = z.object({
+        id: z.string().uuid(),
+        userId: z.string().trim().min(1),
+        functionalRole: clientFunctionalRoleSchema,
+      }).parse(request.params);
+      await removeClientTeamMember(database, identity, params.id, params.userId, params.functionalRole);
+      return { success: true };
+    });
+    app.delete(`${prefix}/:id/team/:userId`, async (request) => {
+      const identity = await authenticate(database, auth, request.headers);
+      requirePermission(identity, 'clients.team.manage');
+      const params = z.object({
+        id: z.string().uuid(),
+        userId: z.string().trim().min(1),
+      }).parse(request.params);
+      const query = z.object({
+        functionalRole: clientFunctionalRoleSchema.optional(),
+      }).parse(request.query);
+      await removeClientTeamMember(database, identity, params.id, params.userId, query.functionalRole);
+      return { success: true };
+    });
+
+    // Fase 2A — Escopo Contratado (client_scope_item)
+    app.get(`${prefix}/:id/scope`, async (request) => {
+      const identity = await authenticate(database, auth, request.headers);
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      return listClientScopeItems(database, identity, params.id);
+    });
+    app.post(`${prefix}/:id/scope`, async (request, reply) => {
+      const identity = await authenticate(database, auth, request.headers);
+      requirePermission(identity, 'clients.manage');
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      const input = createClientScopeItemSchema.parse(request.body);
+      const scopeItem = await createClientScopeItem(database, identity, params.id, input);
+      return reply.code(201).send({ scopeItem });
+    });
+    app.patch(`${prefix}/:id/scope/:scopeId`, async (request) => {
+      const identity = await authenticate(database, auth, request.headers);
+      requirePermission(identity, 'clients.manage');
+      const params = z.object({
+        id: z.string().uuid(),
+        scopeId: z.string().uuid(),
+      }).parse(request.params);
+      const input = updateClientScopeItemSchema.parse(request.body);
+      const scopeItem = await updateClientScopeItem(database, identity, params.id, params.scopeId, input);
+      return { scopeItem };
+    });
+    app.delete(`${prefix}/:id/scope/:scopeId`, async (request) => {
+      const identity = await authenticate(database, auth, request.headers);
+      requirePermission(identity, 'clients.manage');
+      const params = z.object({
+        id: z.string().uuid(),
+        scopeId: z.string().uuid(),
+      }).parse(request.params);
+      await deleteClientScopeItem(database, identity, params.id, params.scopeId);
+      return { success: true };
+    });
+  }
 
   // ==========================================
   // FASE 3: DEMANDAS E TAREFAS
@@ -368,7 +505,7 @@ export async function buildApp({ config, database, logger }: Options) {
     return startTask(database, identity, params.id, input);
   });
 
-  app.post('/api/v1/tasks/:id/submit-review', async (request) => {
+  app.post('/api/v1/tasks/:id/submit-review', { bodyLimit: 4 * 1024 * 1024 }, async (request) => {
     const identity = await authenticate(database, auth, request.headers);
     requirePermission(identity, 'tasks.execute');
     const params = z.object({ id: z.string().uuid() }).parse(request.params);
@@ -376,7 +513,7 @@ export async function buildApp({ config, database, logger }: Options) {
     return submitTaskReview(database, identity, params.id, input);
   });
 
-  app.post('/api/v1/tasks/:id/review', async (request) => {
+  app.post('/api/v1/tasks/:id/review', { bodyLimit: 4 * 1024 * 1024 }, async (request) => {
     const identity = await authenticate(database, auth, request.headers);
     requirePermission(identity, 'tasks.review');
     const params = z.object({ id: z.string().uuid() }).parse(request.params);
@@ -447,7 +584,7 @@ export async function buildApp({ config, database, logger }: Options) {
     return listTaskComments(database, identity, params.id);
   });
 
-  app.post('/api/v1/tasks/:id/comments', async (request, reply) => {
+  app.post('/api/v1/tasks/:id/comments', { bodyLimit: 4 * 1024 * 1024 }, async (request, reply) => {
     const identity = await authenticate(database, auth, request.headers);
     if (!identity.permissions.includes('tasks.execute') && !identity.permissions.includes('tasks.manage')) {
       throw new AppError(403, 'FORBIDDEN');
@@ -603,6 +740,76 @@ export async function buildApp({ config, database, logger }: Options) {
     requirePermission(identity, 'demands.read');
     const query = z.object({ clientId: z.string().uuid().optional() }).parse(request.query);
     return getBottlenecksReport(database, identity, query);
+  });
+
+  // Fase 10 — Backups & Google Drive (rclone crypt)
+  app.get('/api/v1/backups/status', async (request) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'roles.manage');
+    if (!identity.roles.includes('administrator')) throw new AppError(403, 'FORBIDDEN');
+    return getBackupStatus(database);
+  });
+
+  app.post('/api/v1/backups/run', async (request) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'roles.manage');
+    if (!identity.roles.includes('administrator')) throw new AppError(403, 'FORBIDDEN');
+    return triggerBackup(database);
+  });
+
+  // Cofre de Credenciais (AES-256-GCM) & Hermes Agent
+  app.get('/api/v1/hermes/status', async (request) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'roles.manage');
+    if (!identity.roles.includes('administrator')) throw new AppError(403, 'FORBIDDEN');
+    return getHermesStatus(database);
+  });
+
+  app.get('/api/v1/vault/credentials', async (request) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'roles.manage');
+    if (!identity.roles.includes('administrator')) throw new AppError(403, 'FORBIDDEN');
+    const query = z
+      .object({
+        clientId: z.string().uuid().optional(),
+        search: z.string().max(120).optional(),
+      })
+      .parse(request.query);
+    return listClientCredentials(config, database, query);
+  });
+
+  app.post('/api/v1/vault/credentials', async (request, reply) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'roles.manage');
+    if (!identity.roles.includes('administrator')) throw new AppError(403, 'FORBIDDEN');
+    const input = createClientCredentialSchema.parse(request.body);
+    const created = await createClientCredential(config, database, identity.user.id, input);
+    return reply.code(201).send(created);
+  });
+
+  app.patch('/api/v1/vault/credentials/:id', async (request) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'roles.manage');
+    if (!identity.roles.includes('administrator')) throw new AppError(403, 'FORBIDDEN');
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    const input = updateClientCredentialSchema.parse(request.body);
+    return updateClientCredential(config, database, identity.user.id, params.id, input);
+  });
+
+  app.get('/api/v1/vault/credentials/:id/reveal', async (request) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'roles.manage');
+    if (!identity.roles.includes('administrator')) throw new AppError(403, 'FORBIDDEN');
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    return revealClientCredentialSecret(config, database, params.id);
+  });
+
+  app.delete('/api/v1/vault/credentials/:id', async (request) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'roles.manage');
+    if (!identity.roles.includes('administrator')) throw new AppError(403, 'FORBIDDEN');
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    return deleteClientCredential(database, params.id);
   });
 
   await app.ready();

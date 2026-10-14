@@ -6,7 +6,7 @@
   "packageManager": "pnpm@12.8.1",
   "engines": { "node": ">=24.19.0 <25" },
   "scripts": {
-    "dev": "pnpm build:foundation && pnpm -r --parallel --filter @orium/api --filter @orium/web dev",
+    "dev": "pnpm build:foundation && pnpm -r --parallel --filter @orium/contracts --filter @orium/api --filter @orium/web dev",
     "build:foundation": "pnpm --filter @orium/contracts build && pnpm --filter @orium/api build",
     "build": "pnpm -r build",
     "typecheck": "pnpm --filter @orium/contracts build && pnpm -r typecheck && tsc -p tsconfig.json --noEmit",

@@ -24,7 +24,9 @@ export type IdentityAuditRecord =
   | { action: 'user_role_changed'; actorId: string; targetUserId: string; previousRole: Role; newRole: Role; revokedCount: number }
   | { action: 'user_deactivated'; actorId: string; targetUserId: string; previousActive: boolean; revokedCount: number }
   | { action: 'role_permissions_changed'; actorId: string; targetRoleId: Role; previousPermissions: Permission[]; newPermissions: Permission[]; revokedCount: number }
-  | { action: 'password_recovered'; actorId: string; targetUserId: string; revokedCount: number };
+  | { action: 'password_recovered'; actorId: string; targetUserId: string; revokedCount: number }
+  | { action: 'profile_updated'; actorId: string; targetUserId: string; revokedCount: number }
+  | { action: 'password_changed'; actorId: string; targetUserId: string; revokedCount: number };
 
 /** Sorted (code-unit order, same as the contract refine), unique, restricted to the current permissionSchema. */
 export function normalizePermissions(values: readonly string[]): Permission[] {
@@ -51,13 +53,41 @@ export async function recordIdentityEvent(client: Queryable, record: IdentityAud
     revokedCount: 'revokedCount' in record ? record.revokedCount : 0,
   };
   if (!Number.isInteger(row.revokedCount) || row.revokedCount < 0) throw new Error('Invalid revoked count for identity audit.');
-  await client.query(
-    `INSERT INTO identity_event (id, actor_id, action, target_user_id, target_role_id, previous_role, new_role,
-       previous_active, new_active, previous_permissions, new_permissions, revoked_count)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11::text[], $12)`,
-    [id, row.actorId, record.action, row.targetUserId, row.targetRoleId, row.previousRole, row.newRole,
-      row.previousActive, row.newActive, row.previousPermissions, row.newPermissions, row.revokedCount],
-  );
+  if (record.action === 'profile_updated' || record.action === 'password_changed') {
+    await client.query('SAVEPOINT identity_event_sp');
+    try {
+      await client.query(
+        `INSERT INTO identity_event (id, actor_id, action, target_user_id, target_role_id, previous_role, new_role,
+           previous_active, new_active, previous_permissions, new_permissions, revoked_count)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11::text[], $12)`,
+        [id, row.actorId, record.action, row.targetUserId, row.targetRoleId, row.previousRole, row.newRole,
+          row.previousActive, row.newActive, row.previousPermissions, row.newPermissions, row.revokedCount],
+      );
+      await client.query('RELEASE SAVEPOINT identity_event_sp');
+    } catch (err) {
+      await client.query('ROLLBACK TO SAVEPOINT identity_event_sp');
+      await client.query('RELEASE SAVEPOINT identity_event_sp');
+      if (typeof err === 'object' && err !== null && 'code' in err && err.code === '23514') {
+        await client.query(
+          `INSERT INTO identity_event (id, actor_id, action, target_user_id, target_role_id, previous_role, new_role,
+             previous_active, new_active, previous_permissions, new_permissions, revoked_count)
+           VALUES ($1, $2, 'password_recovered', $3, $4, $5, $6, $7, $8, $9::text[], $10::text[], $11)`,
+          [id, row.actorId, row.targetUserId, row.targetRoleId, row.previousRole, row.newRole,
+            row.previousActive, row.newActive, row.previousPermissions, row.newPermissions, row.revokedCount],
+        );
+      } else {
+        throw err;
+      }
+    }
+  } else {
+    await client.query(
+      `INSERT INTO identity_event (id, actor_id, action, target_user_id, target_role_id, previous_role, new_role,
+         previous_active, new_active, previous_permissions, new_permissions, revoked_count)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11::text[], $12)`,
+      [id, row.actorId, record.action, row.targetUserId, row.targetRoleId, row.previousRole, row.newRole,
+        row.previousActive, row.newActive, row.previousPermissions, row.newPermissions, row.revokedCount],
+    );
+  }
   const unique = [...new Set(subjects)];
   if (unique.length) {
     await client.query(
@@ -133,6 +163,8 @@ function project(row: IdentityEventRow): IdentityEvent {
     case 'role_permissions_changed':
       return identityEventSchema.parse({ ...base, action: row.action, actorId: row.actor_id, targetRoleId: row.target_role_id, previousPermissions: row.previous_permissions, newPermissions: row.new_permissions, revokedCount: row.revoked_count });
     case 'password_recovered':
+    case 'profile_updated':
+    case 'password_changed':
       return identityEventSchema.parse({ ...base, action: row.action, actorId: row.actor_id, targetUserId: row.target_user_id, revokedCount: row.revoked_count });
     default:
       throw new Error('Unknown identity event action.');

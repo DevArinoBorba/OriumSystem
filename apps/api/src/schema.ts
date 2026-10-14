@@ -42,6 +42,14 @@ export const client = pgTable('client', {
   email: text('email'),
   phone: text('phone'),
   notes: text('notes'),
+  contractStatus: text('contract_status').notNull().default('active'),
+  segment: text('segment'),
+  accountManagerUserId: text('account_manager_user_id').references(() => user.id, { onDelete: 'set null' }),
+  briefingSummary: text('briefing_summary').notNull().default(''),
+  brandKitUrl: text('brand_kit_url'),
+  driveFolderUrl: text('drive_folder_url'),
+  activeChannels: text('active_channels').array().notNull().default([]),
+  onboardingCompletedAt: time('onboarding_completed_at'),
   archivedAt: time('archived_at'),
   createdAt: time('created_at').notNull().defaultNow(),
   updatedAt: time('updated_at').notNull().defaultNow(),
@@ -50,6 +58,41 @@ export const client = pgTable('client', {
   index('client_name_idx').on(table.name),
   index('client_archived_at_idx').on(table.archivedAt),
   index('client_created_at_idx').on(table.createdAt),
+  index('client_contract_status_idx').on(table.contractStatus),
+  index('client_account_manager_idx').on(table.accountManagerUserId),
+]);
+
+export const clientTeamMember = pgTable('client_team_member', {
+  clientId: uuid('client_id').notNull().references(() => client.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  functionalRole: text('functional_role').notNull(),
+  isPrimary: boolean('is_primary').notNull().default(false),
+  canCreateDemands: boolean('can_create_demands').notNull().default(false),
+  assignedByUserId: text('assigned_by_user_id').notNull().references(() => user.id, { onDelete: 'restrict' }),
+  assignedAt: time('assigned_at').notNull().defaultNow(),
+}, (table) => [
+  primaryKey({ columns: [table.clientId, table.userId, table.functionalRole] }),
+  index('client_team_member_user_idx').on(table.userId, table.clientId),
+  index('client_team_member_client_idx').on(table.clientId),
+]);
+
+export const clientScopeItem = pgTable('client_scope_item', {
+  id: uuid('id').primaryKey(),
+  clientId: uuid('client_id').notNull().references(() => client.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  description: text('description').notNull().default(''),
+  category: text('category').notNull().default('general'),
+  cadence: text('cadence').notNull().default('monthly'),
+  contractedQuantity: integer('contracted_quantity').notNull().default(1),
+  slaBusinessDays: integer('sla_business_days'),
+  slaHours: integer('sla_hours'),
+  active: boolean('active').notNull().default(true),
+  version: integer('version').notNull().default(1),
+  createdAt: time('created_at').notNull().defaultNow(),
+  updatedAt: time('updated_at').notNull().defaultNow(),
+}, (table) => [
+  index('client_scope_item_client_active_idx').on(table.clientId, table.active),
+  index('client_scope_item_category_idx').on(table.category),
 ]);
 
 export const demand = pgTable('demand', {
