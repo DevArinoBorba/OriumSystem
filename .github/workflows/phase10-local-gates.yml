@@ -26,10 +26,12 @@ jobs:
           cache: 'pnpm'
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: ESLint (deploy/verification + tests/phase10)
-        run: pnpm exec eslint deploy/verification tests/phase10
+      - name: ESLint (apps + packages + deploy/verification + tests)
+        run: pnpm exec eslint apps/api apps/web packages/contracts deploy/verification tests/phase10 tests/phase11
       - name: TypeScript typecheck (root)
         run: pnpm run typecheck
+      - name: Build production bundles (contracts + api + web)
+        run: pnpm run build
       - name: Phase 10 test suite
         run: pnpm vitest run tests/phase10/
       - name: Release pipeline (fail-closed local)

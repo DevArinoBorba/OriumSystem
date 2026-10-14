@@ -8,6 +8,7 @@ import { DashboardView } from './components/DashboardView.js';
 import { DemandsView } from './components/DemandsView.js';
 import { MaterialsView } from './components/MaterialsView.js';
 import { NotificationsView } from './components/NotificationsView.js';
+import { ReportsView } from './components/ReportsView.js';
 import { TeamView } from './components/TeamView.js';
 import type { ActiveTab, MaterialNavigationTarget } from './types.js';
 
@@ -249,6 +250,13 @@ export function App() {
             initialTaskId={demandNavTarget?.taskId ?? null}
             onNavigationConsumed={clearDemandNav}
             onOpenMaterials={handleOpenMaterials}
+          />
+        )}
+
+        {activeTab === 'reports' && hasDemandsRead && (
+          <ReportsView
+            session={session}
+            onUnauthorized={handleUnauthorized}
           />
         )}
 

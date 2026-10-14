@@ -35,6 +35,10 @@ import {
   listMaterialTargetsQuerySchema,
   clientTimelineQuerySchema,
   listNotificationsQuerySchema,
+  createDemandTemplateInputSchema,
+  updateDemandTemplateInputSchema,
+  instantiateDemandTemplateInputSchema,
+  reportQuerySchema,
 } from '@orium/contracts';
 import type { Config } from './config.js';
 import { assertApplicationDatabase, type Database } from './db.js';
@@ -43,6 +47,14 @@ import { authenticate, authenticateInternal, changeIdentity, changeRolePermissio
 import { listClients, getClientById, createClient, updateClient, archiveClient, restoreClient } from './clients.js';
 import { listIdentityEvents } from './identity-audit.js';
 import { listNotifications, markNotificationAsRead } from './notifications.js';
+import {
+  listDemandTemplates,
+  getDemandTemplateById,
+  createDemandTemplate,
+  updateDemandTemplate,
+  instantiateDemandTemplate,
+} from './templates.js';
+import { getProductivityReport, getBottlenecksReport } from './reports.js';
 import {
   listDemands,
   createDemand,
@@ -136,6 +148,13 @@ export async function buildApp({ config, database, logger }: Options) {
       await assertApplicationDatabase(database);
       await database.pool.query('SELECT id FROM role LIMIT 1');
       return { status: 'ok' };
+    } catch { return reply.code(503).send({ status: 'unavailable' }); }
+  });
+  app.get('/api/v1/ready', async (_request, reply) => {
+    try {
+      await assertApplicationDatabase(database);
+      await database.pool.query('SELECT id FROM role LIMIT 1');
+      return { status: 'ready' };
     } catch { return reply.code(503).send({ status: 'unavailable' }); }
   });
 
@@ -528,6 +547,62 @@ export async function buildApp({ config, database, logger }: Options) {
     const params = z.object({ id: z.string().uuid() }).parse(request.params);
     z.object({}).strict().parse(request.body);
     return markNotificationAsRead(database, sessionAuth, params.id);
+  });
+
+  // Fase 11 — Templates de Demandas
+  app.get('/api/v1/demand-templates', async (request) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'demands.read');
+    return listDemandTemplates(database, identity);
+  });
+
+  app.get('/api/v1/demand-templates/:id', async (request) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'demands.read');
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    return getDemandTemplateById(database, identity, params.id);
+  });
+
+  app.post('/api/v1/demand-templates', async (request, reply) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'demands.write');
+    if (!identity.roles.includes('administrator')) throw new AppError(403, 'FORBIDDEN');
+    const input = createDemandTemplateInputSchema.parse(request.body);
+    const result = await createDemandTemplate(database, identity, input);
+    return reply.code(201).send(result);
+  });
+
+  app.patch('/api/v1/demand-templates/:id', async (request) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'demands.write');
+    if (!identity.roles.includes('administrator')) throw new AppError(403, 'FORBIDDEN');
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    const input = updateDemandTemplateInputSchema.parse(request.body);
+    return updateDemandTemplate(database, identity, params.id, input);
+  });
+
+  app.post('/api/v1/demand-templates/:id/instantiate', async (request, reply) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'demands.write');
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    const input = instantiateDemandTemplateInputSchema.parse(request.body);
+    const result = await instantiateDemandTemplate(database, identity, params.id, input);
+    return reply.code(201).send(result);
+  });
+
+  // Fase 11 — Relatórios Operacionais
+  app.get('/api/v1/reports/productivity', async (request) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'demands.read');
+    const query = reportQuerySchema.parse(request.query);
+    return getProductivityReport(database, identity, query);
+  });
+
+  app.get('/api/v1/reports/bottlenecks', async (request) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'demands.read');
+    const query = z.object({ clientId: z.string().uuid().optional() }).parse(request.query);
+    return getBottlenecksReport(database, identity, query);
   });
 
   await app.ready();

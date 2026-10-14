@@ -70,6 +70,8 @@ export const demand = pgTable('demand', {
   index('demand_status_idx').on(table.status),
   index('demand_delivery_date_idx').on(table.deliveryDate),
   index('demand_created_at_idx').on(table.createdAt),
+  index('demand_status_created_at_idx').on(table.status, table.createdAt),
+  index('demand_client_status_delivery_idx').on(table.clientId, table.status, table.deliveryDate),
 ]);
 
 export const task = pgTable('task', {
@@ -98,6 +100,9 @@ export const task = pgTable('task', {
   index('task_assigned_to_user_id_idx').on(table.assignedToUserId),
   index('task_status_idx').on(table.status),
   index('task_delivery_date_idx').on(table.deliveryDate),
+  index('task_assigned_status_delivery_idx').on(table.assignedToUserId, table.status, table.deliveryDate),
+  index('task_assigned_demand_idx').on(table.assignedToUserId, table.demandId),
+  index('task_active_status_idx').on(table.demandId, table.status),
 ]);
 
 export const taskRequirement = pgTable('task_requirement', {
@@ -148,6 +153,7 @@ export const demandEvent = pgTable('demand_event', {
   index('demand_event_task_id_idx').on(table.taskId),
   index('demand_event_actor_id_idx').on(table.actorId),
   index('demand_event_created_at_idx').on(table.createdAt),
+  index('demand_event_demand_created_idx').on(table.demandId, table.createdAt),
 ]);
 
 export const material = pgTable('material', {
@@ -239,4 +245,53 @@ export const notification = pgTable('notification', {
   index('notification_task_id_idx').on(table.taskId),
   index('notification_source_event_id_idx').on(table.sourceEventId),
 ]);
+
+export const demandTemplate = pgTable('demand_template', {
+  id: uuid('id').primaryKey(),
+  title: text('title').notNull(),
+  description: text('description').notNull().default(''),
+  category: text('category').notNull().default('general'),
+  defaultPriority: text('default_priority').notNull().default('normal'),
+  estimatedDays: integer('estimated_days').notNull().default(5),
+  active: boolean('active').notNull().default(true),
+  version: integer('version').notNull().default(1),
+  createdAt: time('created_at').notNull().defaultNow(),
+  updatedAt: time('updated_at').notNull().defaultNow(),
+}, (table) => [
+  index('demand_template_active_idx').on(table.active),
+  index('demand_template_category_idx').on(table.category),
+]);
+
+export const demandTemplateTask = pgTable('demand_template_task', {
+  id: uuid('id').primaryKey(),
+  templateId: uuid('template_id').notNull().references(() => demandTemplate.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  description: text('description').notNull().default(''),
+  suggestedRole: text('suggested_role').notNull().default('collaborator'),
+  priority: text('priority').notNull().default('normal'),
+  dayOffsetStart: integer('day_offset_start').notNull().default(0),
+  durationDays: integer('duration_days').notNull().default(1),
+  orderIndex: integer('order_index').notNull().default(0),
+}, (table) => [
+  index('demand_template_task_template_id_idx').on(table.templateId),
+]);
+
+export const demandTemplateTaskRequirement = pgTable('demand_template_task_requirement', {
+  id: uuid('id').primaryKey(),
+  templateTaskId: uuid('template_task_id').notNull().references(() => demandTemplateTask.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  mandatory: boolean('mandatory').notNull().default(true),
+  orderIndex: integer('order_index').notNull().default(0),
+}, (table) => [
+  index('demand_template_task_req_task_id_idx').on(table.templateTaskId),
+]);
+
+export const demandTemplateTaskDependency = pgTable('demand_template_task_dependency', {
+  templateTaskId: uuid('template_task_id').notNull().references(() => demandTemplateTask.id, { onDelete: 'cascade' }),
+  dependsOnTemplateTaskId: uuid('depends_on_template_task_id').notNull().references(() => demandTemplateTask.id, { onDelete: 'cascade' }),
+}, (table) => [
+  primaryKey({ columns: [table.templateTaskId, table.dependsOnTemplateTaskId] }),
+  index('demand_template_task_dep_depends_idx').on(table.dependsOnTemplateTaskId),
+]);
+
 

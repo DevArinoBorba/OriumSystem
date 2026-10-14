@@ -7,12 +7,16 @@ import {
   demandHistoryResponseSchema,
   demandListResponseSchema,
   demandResponseSchema,
+  demandTemplateListResponseSchema,
+  demandTemplateResponseSchema,
   listMaterialTargetsResponseSchema,
   listMaterialsResponseSchema,
   materialHistoryResponseSchema,
   materialSchema,
   notificationListResponseSchema,
   notificationResponseSchema,
+  productivityReportResponseSchema,
+  bottlenecksReportResponseSchema,
   publicUserSchema,
   roleSchema,
   sessionResponseSchema,
@@ -21,6 +25,7 @@ import {
   taskResponseSchema,
   type AddDependencyInput,
   type ApproveTaskPauseInput,
+  type BottlenecksReportResponse,
   type Client,
   type ClientListResponse,
   type ClientTimelineQuery,
@@ -28,12 +33,17 @@ import {
   type CompleteDemandInput,
   type CreateClientInput,
   type CreateDemandInput,
+  type CreateDemandTemplateInput,
   type CreateMaterialInput,
   type CreateTaskCommentInput,
   type CreateTaskInput,
   type Demand,
   type DemandEvent,
+  type DemandResponse,
+  type DemandTemplateListResponse,
+  type DemandTemplateResponse,
   type DashboardResponse,
+  type InstantiateDemandTemplateInput,
   type ListMaterialTargetsQuery,
   type ListMaterialTargetsResponse,
   type ListMaterialsQuery,
@@ -44,6 +54,7 @@ import {
   type Material,
   type MaterialHistoryQuery,
   type MaterialHistoryResponse,
+  type ProductivityReportResponse,
   type RemoveDependencyInput,
   type ReassignTaskInput,
   type RequestTaskPauseInput,
@@ -56,6 +67,7 @@ import {
   type TaskVersionInput,
   type UpdateClientInput,
   type UpdateDemandInput,
+  type UpdateDemandTemplateInput,
   type UpdateMaterialInput,
   type UpdateRequirementInput,
 } from '@orium/contracts';
@@ -799,5 +811,93 @@ export const api = {
       { method: 'POST', body: JSON.stringify({}), signal },
       onUnauthorized,
       (raw) => notificationResponseSchema.parse(raw),
+    ),
+
+  // ================= Fase 11 — Templates de Demandas =================
+
+  listDemandTemplates: (
+    params: { active?: boolean; category?: string },
+    signal: AbortSignal,
+    onUnauthorized: () => void,
+  ): Promise<DemandTemplateListResponse> => {
+    const query = new URLSearchParams();
+    if (params.active !== undefined) query.set('active', String(params.active));
+    if (params.category) query.set('category', params.category);
+    const qs = query.size > 0 ? `?${query.toString()}` : '';
+    return request(
+      `/api/v1/demand-templates${qs}`,
+      { method: 'GET', signal },
+      onUnauthorized,
+      (raw) => demandTemplateListResponseSchema.parse(raw),
+    );
+  },
+
+  createDemandTemplate: (
+    input: CreateDemandTemplateInput,
+    signal: AbortSignal,
+    onUnauthorized: () => void,
+  ): Promise<DemandTemplateResponse> =>
+    request(
+      '/api/v1/demand-templates',
+      { method: 'POST', body: JSON.stringify(input), signal },
+      onUnauthorized,
+      (raw) => demandTemplateResponseSchema.parse(raw),
+    ),
+
+  updateDemandTemplate: (
+    id: string,
+    input: UpdateDemandTemplateInput,
+    signal: AbortSignal,
+    onUnauthorized: () => void,
+  ): Promise<DemandTemplateResponse> =>
+    request(
+      `/api/v1/demand-templates/${id}`,
+      { method: 'PATCH', body: JSON.stringify(input), signal },
+      onUnauthorized,
+      (raw) => demandTemplateResponseSchema.parse(raw),
+    ),
+
+  instantiateDemandTemplate: (
+    id: string,
+    input: InstantiateDemandTemplateInput,
+    signal: AbortSignal,
+    onUnauthorized: () => void,
+  ): Promise<DemandResponse> =>
+    request(
+      `/api/v1/demand-templates/${id}/instantiate`,
+      { method: 'POST', body: JSON.stringify(input), signal },
+      onUnauthorized,
+      (raw) => demandResponseSchema.parse(raw),
+    ),
+
+  // ================= Fase 11 — Relatórios Operacionais =================
+
+  getProductivityReport: (
+    query: { startDate: string; endDate: string; clientId?: string; userId?: string },
+    signal: AbortSignal,
+    onUnauthorized: () => void,
+  ): Promise<ProductivityReportResponse> => {
+    const params = new URLSearchParams();
+    params.set('startDate', query.startDate);
+    params.set('endDate', query.endDate);
+    if (query.clientId) params.set('clientId', query.clientId);
+    if (query.userId) params.set('userId', query.userId);
+    return request(
+      `/api/v1/reports/productivity?${params.toString()}`,
+      { method: 'GET', signal },
+      onUnauthorized,
+      (raw) => productivityReportResponseSchema.parse(raw),
+    );
+  },
+
+  getBottlenecksReport: (
+    signal: AbortSignal,
+    onUnauthorized: () => void,
+  ): Promise<BottlenecksReportResponse> =>
+    request(
+      '/api/v1/reports/bottlenecks',
+      { method: 'GET', signal },
+      onUnauthorized,
+      (raw) => bottlenecksReportResponseSchema.parse(raw),
     ),
 };

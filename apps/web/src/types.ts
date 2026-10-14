@@ -1,8 +1,10 @@
 import type {
+  BottlenecksReportResponse,
   Client,
   ClientTimelineEvent,
   ClientTimelineQuery,
   ClientTimelineResponse,
+  CreateDemandTemplateInput,
   CreateMaterialInput,
   DashboardItem,
   DashboardItemClient,
@@ -13,6 +15,8 @@ import type {
   DashboardSection,
   DashboardWorkloadUser,
   Demand,
+  DemandTemplate,
+  InstantiateDemandTemplateInput,
   ListMaterialTargetsQuery,
   ListMaterialTargetsResponse,
   ListMaterialsQuery,
@@ -27,20 +31,31 @@ import type {
   NotificationKind,
   NotificationListResponse,
   NotificationResponse,
+  ProductivityReportResponse,
   Role,
   SessionResponse,
   Task,
   TimelineEventSource,
+  UpdateDemandTemplateInput,
   UpdateMaterialInput,
 } from '@orium/contracts';
 
-export type ActiveTab = 'dashboard' | 'clients' | 'team' | 'demands' | 'materials' | 'notifications';
+export type ActiveTab =
+  | 'dashboard'
+  | 'clients'
+  | 'team'
+  | 'demands'
+  | 'materials'
+  | 'notifications'
+  | 'reports';
 
 export type {
+  BottlenecksReportResponse,
   Client,
   ClientTimelineEvent,
   ClientTimelineQuery,
   ClientTimelineResponse,
+  CreateDemandTemplateInput,
   CreateMaterialInput,
   DashboardItem,
   DashboardItemClient,
@@ -51,6 +66,8 @@ export type {
   DashboardSection,
   DashboardWorkloadUser,
   Demand,
+  DemandTemplate,
+  InstantiateDemandTemplateInput,
   ListMaterialTargetsQuery,
   ListMaterialTargetsResponse,
   ListMaterialsQuery,
@@ -65,10 +82,12 @@ export type {
   NotificationKind,
   NotificationListResponse,
   NotificationResponse,
+  ProductivityReportResponse,
   Role,
   SessionResponse,
   Task,
   TimelineEventSource,
+  UpdateDemandTemplateInput,
   UpdateMaterialInput,
 };
 

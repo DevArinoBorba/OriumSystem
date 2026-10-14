@@ -2346,3 +2346,250 @@ dialog.native-dialog::backdrop {
     flex-wrap: wrap;
   }
 }
+
+
+/* ==========================================================================
+   Fase 11 — Relatórios Operacionais e Templates de Demandas
+   ========================================================================== */
+
+/* Modals alargados para templates */
+.modal-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  width: min(100%, 540px);
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-modal);
+  padding: 28px;
+}
+
+.modal-card.wide,
+.modal-panel.wide {
+  width: min(100%, 820px);
+}
+
+/* Indicadores / KPI Grid */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+
+.kpi-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 2px 6px rgb(23 32 51 / 4%);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.kpi-card:hover {
+  box-shadow: 0 4px 12px rgb(23 32 51 / 8%);
+}
+
+.kpi-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
+.kpi-value {
+  font-size: 1.85rem;
+  font-weight: 700;
+  color: var(--color-text-main);
+  margin: 6px 0 2px;
+  letter-spacing: -0.02em;
+}
+
+.kpi-help {
+  font-size: 0.78rem;
+  color: var(--color-text-light);
+  line-height: 1.4;
+}
+
+/* Relatórios - Filtros e Seções */
+.report-filters {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+
+.report-section {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--color-border);
+}
+
+/* Badges de Categoria */
+.category-badge {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  font-weight: 600;
+  font-size: 0.75rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+/* Templates - Seleção e Cards */
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.template-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 2px 6px rgb(23 32 51 / 4%);
+}
+
+.template-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.template-card-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 650;
+  color: var(--color-text-main);
+}
+
+.template-card-desc {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+  flex: 1;
+}
+
+.template-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--color-text-light);
+  padding: 6px 0;
+  border-top: 1px dashed var(--color-border);
+}
+
+.template-card-actions {
+  margin-top: 4px;
+}
+
+.template-banner-info {
+  background: var(--color-primary-light);
+  border: 1px solid #bfd3f6;
+  border-radius: 10px;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.88rem;
+  color: var(--color-text-main);
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Prévia de Tarefas do Template e Atribuição */
+.template-tasks-section {
+  border-top: 1px solid var(--color-border);
+  padding-top: 16px;
+}
+
+.template-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.template-task-preview-card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.task-preview-info {
+  flex: 1;
+  min-width: 240px;
+}
+
+.task-preview-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.92rem;
+  margin-bottom: 4px;
+}
+
+.task-preview-index {
+  background: var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.task-preview-meta {
+  display: flex;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.task-preview-desc {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+.task-preview-assignment select {
+  min-width: 220px;
+  font-size: 0.85rem;
+  padding: 6px 10px;
+}
+
+/* Formulário de Criação de Tarefas no Template */
+.template-tasks-draft-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.template-task-draft-card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.draft-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}

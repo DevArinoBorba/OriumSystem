@@ -840,4 +840,185 @@ export const notificationResponseSchema = z.object({
 }).strict();
 export type NotificationResponse = z.infer<typeof notificationResponseSchema>;
 
+// ==========================================
+// FASE 11: REFINAMENTO — TEMPLATES E RELATÓRIOS
+// ==========================================
+
+export const demandTemplateCategorySchema = z.enum([
+  'web',
+  'design',
+  'video',
+  'marketing',
+  'social_media',
+  'general',
+]);
+export type DemandTemplateCategory = z.infer<typeof demandTemplateCategorySchema>;
+
+export const templateRequirementInputSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  mandatory: z.boolean().default(true),
+  orderIndex: z.number().int().nonnegative().default(0),
+}).strict();
+export type TemplateRequirementInput = z.infer<typeof templateRequirementInputSchema>;
+
+export const templateTaskInputSchema = z.object({
+  tempId: z.string().trim().min(1).max(100).optional(),
+  title: z.string().trim().min(1).max(160),
+  description: z.string().trim().max(5000).default(''),
+  suggestedRole: roleSchema.default('collaborator'),
+  priority: taskPrioritySchema.default('normal'),
+  dayOffsetStart: z.number().int().nonnegative().default(0),
+  durationDays: z.number().int().positive().default(1),
+  orderIndex: z.number().int().nonnegative().default(0),
+  dependsOnTempIds: z.array(z.string().trim().min(1)).default([]),
+  requirements: z.array(templateRequirementInputSchema).default([]),
+}).strict();
+export type TemplateTaskInput = z.infer<typeof templateTaskInputSchema>;
+
+export const createDemandTemplateInputSchema = z.object({
+  title: z.string().trim().min(1).max(160),
+  description: z.string().trim().max(5000).default(''),
+  category: demandTemplateCategorySchema.default('general'),
+  defaultPriority: demandPrioritySchema.default('normal'),
+  estimatedDays: z.number().int().positive().default(5),
+  tasks: z.array(templateTaskInputSchema).min(1),
+}).strict();
+export type CreateDemandTemplateInput = z.infer<typeof createDemandTemplateInputSchema>;
+
+export const updateDemandTemplateInputSchema = z.object({
+  version: z.number().int().positive(),
+  title: z.string().trim().min(1).max(160).optional(),
+  description: z.string().trim().max(5000).optional(),
+  category: demandTemplateCategorySchema.optional(),
+  defaultPriority: demandPrioritySchema.optional(),
+  estimatedDays: z.number().int().positive().optional(),
+  active: z.boolean().optional(),
+  tasks: z.array(templateTaskInputSchema).min(1).optional(),
+}).strict().refine((data) => Object.keys(data).some((k) => k !== 'version'), {
+  message: 'Pelo menos um campo editável deve ser fornecido.',
+});
+export type UpdateDemandTemplateInput = z.infer<typeof updateDemandTemplateInputSchema>;
+
+export const instantiateDemandTemplateInputSchema = z.object({
+  clientId: z.string().uuid(),
+  title: z.string().trim().min(1).max(160).optional(),
+  description: z.string().trim().max(5000).optional(),
+  priority: demandPrioritySchema.optional(),
+  startDate: calendarDateSchema.optional(),
+  deliveryDate: calendarDateSchema.optional(),
+  assignments: z.record(z.string(), z.string()).optional(),
+}).strict();
+export type InstantiateDemandTemplateInput = z.infer<typeof instantiateDemandTemplateInputSchema>;
+
+export const demandTemplateTaskRequirementSchema = z.object({
+  id: z.string().uuid(),
+  templateTaskId: z.string().uuid(),
+  title: z.string(),
+  mandatory: z.boolean(),
+  orderIndex: z.number().int(),
+}).strict();
+export type DemandTemplateTaskRequirement = z.infer<typeof demandTemplateTaskRequirementSchema>;
+
+export const demandTemplateTaskSchema = z.object({
+  id: z.string().uuid(),
+  templateId: z.string().uuid(),
+  title: z.string(),
+  description: z.string(),
+  suggestedRole: z.string(),
+  priority: taskPrioritySchema,
+  dayOffsetStart: z.number().int(),
+  durationDays: z.number().int(),
+  orderIndex: z.number().int(),
+  requirements: z.array(demandTemplateTaskRequirementSchema),
+  dependsOnTaskIds: z.array(z.string().uuid()),
+}).strict();
+export type DemandTemplateTask = z.infer<typeof demandTemplateTaskSchema>;
+
+export const demandTemplateSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string(),
+  description: z.string(),
+  category: demandTemplateCategorySchema,
+  defaultPriority: demandPrioritySchema,
+  estimatedDays: z.number().int(),
+  active: z.boolean(),
+  version: z.number().int(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+  tasks: z.array(demandTemplateTaskSchema),
+}).strict();
+export type DemandTemplate = z.infer<typeof demandTemplateSchema>;
+
+export const demandTemplateResponseSchema = z.object({
+  template: demandTemplateSchema,
+}).strict();
+export type DemandTemplateResponse = z.infer<typeof demandTemplateResponseSchema>;
+
+export const demandTemplateListResponseSchema = z.object({
+  templates: z.array(demandTemplateSchema),
+  total: z.number().int().nonnegative(),
+}).strict();
+export type DemandTemplateListResponse = z.infer<typeof demandTemplateListResponseSchema>;
+
+export const reportQuerySchema = z.object({
+  startDate: calendarDateSchema,
+  endDate: calendarDateSchema,
+  clientId: z.string().uuid().optional(),
+  userId: z.string().optional(),
+}).strict().refine((data) => data.startDate <= data.endDate, {
+  message: 'startDate deve ser anterior ou igual a endDate',
+  path: ['startDate'],
+});
+export type ReportQuery = z.infer<typeof reportQuerySchema>;
+
+export const productivityReportResponseSchema = z.object({
+  period: z.object({
+    startDate: calendarDateSchema,
+    endDate: calendarDateSchema,
+  }).strict(),
+  summary: z.object({
+    demandsCreated: z.number().int().nonnegative(),
+    demandsCompleted: z.number().int().nonnegative(),
+    tasksCompleted: z.number().int().nonnegative(),
+    onTimeDeliveryRate: z.number().min(0).max(100),
+    averageLeadTimeHours: z.number().nonnegative(),
+    averageCycleTimeHours: z.number().nonnegative(),
+  }).strict(),
+  byAssignee: z.array(z.object({
+    userId: z.string(),
+    userName: z.string(),
+    tasksCompleted: z.number().int().nonnegative(),
+    averageCycleTimeHours: z.number().nonnegative(),
+    onTimeRate: z.number().min(0).max(100),
+  }).strict()),
+}).strict();
+export type ProductivityReportResponse = z.infer<typeof productivityReportResponseSchema>;
+
+export const bottlenecksReportResponseSchema = z.object({
+  summary: z.object({
+    currentlyBlockedTasks: z.number().int().nonnegative(),
+    currentlyPausedTasks: z.number().int().nonnegative(),
+    currentlyInReviewTasks: z.number().int().nonnegative(),
+    overdueOpenTasks: z.number().int().nonnegative(),
+  }).strict(),
+  stageAverages: z.object({
+    averageReadyWaitHours: z.number().nonnegative(),
+    averageProductionHours: z.number().nonnegative(),
+    averagePauseCount: z.number().nonnegative(),
+  }).strict(),
+  pausedTasks: z.array(z.object({
+    taskId: z.string().uuid(),
+    taskTitle: z.string(),
+    demandId: z.string().uuid(),
+    demandTitle: z.string(),
+    clientName: z.string(),
+    assignedToName: z.string(),
+    status: taskStatusSchema,
+    pauseReason: z.string().nullable(),
+    daysInCurrentStatus: z.number().nonnegative(),
+  }).strict()),
+}).strict();
+export type BottlenecksReportResponse = z.infer<typeof bottlenecksReportResponseSchema>;
+
+
 

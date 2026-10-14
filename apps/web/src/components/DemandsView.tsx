@@ -12,6 +12,8 @@ import {
 } from '@orium/contracts';
 import { api, ApiError } from '../api.js';
 import { TaskDetailView } from './TaskDetailView.js';
+import { UseTemplateModal } from './UseTemplateModal.js';
+import { ManageTemplatesModal } from './ManageTemplatesModal.js';
 import type {
   DemandFormState,
   DemandPriorityFilter,
@@ -136,6 +138,10 @@ export function DemandsView({
 
   // ---------------- Selected task detail (renders TaskDetailView) ----------------
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+
+  // ---------------- Templates modals state ----------------
+  const [useTemplateOpen, setUseTemplateOpen] = useState(false);
+  const [manageTemplatesOpen, setManageTemplatesOpen] = useState(false);
 
   const listRequestRef = useRef<AbortController | null>(null);
   const detailRequestRef = useRef<AbortController | null>(null);
@@ -421,6 +427,13 @@ export function DemandsView({
       demandFormSubmittingRef.current = false;
       setDemandFormBusy(false);
     }
+  }
+
+  function handleDemandCreatedFromTemplate(createdDemandId: string, createdTitle: string) {
+    setNotice(`Chamado "${createdTitle}" criado a partir do template com sucesso.`);
+    setSelectedDemandId(createdDemandId);
+    void loadDemandDetail(createdDemandId);
+    void loadDemands(1, status, priority, appliedSearch);
   }
 
   // ============ Edit demand (data geral explícita / admin) ============
@@ -760,16 +773,38 @@ export function DemandsView({
                 : 'Aqui aparecem os chamados com tarefas atribuídas a você.'}
             </p>
           </div>
-          {isAdmin && hasDemandsWrite && (
-            <button
-              type="button"
-              className="primary-button"
-              onClick={openCreateDemand}
-              disabled={loading || demandFormOpen}
-            >
-              + Novo chamado
-            </button>
-          )}
+          <div className="panel-actions">
+            {hasDemandsWrite && (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setUseTemplateOpen(true)}
+                disabled={loading}
+              >
+                Usar template
+              </button>
+            )}
+            {isAdmin && (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setManageTemplatesOpen(true)}
+                disabled={loading}
+              >
+                Gerenciar templates
+              </button>
+            )}
+            {isAdmin && hasDemandsWrite && (
+              <button
+                type="button"
+                className="primary-button"
+                onClick={openCreateDemand}
+                disabled={loading || demandFormOpen}
+              >
+                + Novo chamado
+              </button>
+            )}
+          </div>
         </div>
 
         {notice && (
@@ -1087,6 +1122,22 @@ export function DemandsView({
             </form>
           </section>
         )}
+
+        {/* Modals for templates */}
+        <UseTemplateModal
+          isOpen={useTemplateOpen}
+          onClose={() => setUseTemplateOpen(false)}
+          clients={clients}
+          users={users}
+          onDemandCreated={handleDemandCreatedFromTemplate}
+          onUnauthorized={onUnauthorized}
+        />
+
+        <ManageTemplatesModal
+          isOpen={manageTemplatesOpen}
+          onClose={() => setManageTemplatesOpen(false)}
+          onUnauthorized={onUnauthorized}
+        />
 
       </section>
     );

@@ -81,6 +81,16 @@ export function Header({
               {isAdmin ? 'Demandas' : 'Minhas demandas'}
             </button>
           )}
+          {hasDemandsRead && (
+            <button
+              type="button"
+              className={`nav-tab ${activeTab === 'reports' ? 'active' : ''}`}
+              onClick={() => onSelectTab('reports')}
+              aria-current={activeTab === 'reports' ? 'page' : undefined}
+            >
+              Relatórios
+            </button>
+          )}
           {hasMaterialsRead && (
             <button
               type="button"
