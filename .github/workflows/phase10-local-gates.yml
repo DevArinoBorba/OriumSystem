@@ -29,7 +29,7 @@ jobs:
       - name: ESLint (deploy/verification + tests/phase10)
         run: pnpm exec eslint deploy/verification tests/phase10
       - name: TypeScript typecheck (root)
-        run: pnpm exec tsc -p tsconfig.json --noEmit
+        run: pnpm run typecheck
       - name: Phase 10 test suite
         run: pnpm vitest run tests/phase10/
       - name: Release pipeline (fail-closed local)
