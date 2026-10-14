@@ -131,6 +131,30 @@
       "targetSchemaVersion": "0006_refinement_templates_reports.sql",
       "filesCount": 67,
       "bundleDir": "releases/release-20261014160623-c96df05c1ff7/bundle"
+    },
+    {
+      "releaseId": "release-20261014161716-ce02431b90f2",
+      "version": "0.1.0",
+      "createdAt": "2026-10-14T16:17:16.742Z",
+      "targetEnvironment": "production",
+      "appImage": "orium-production",
+      "gitCommit": "8556d5d2eba8c06ef519b32e2decb1253c02afd8",
+      "sourceTreeSHA256": "ce02431b90f2b9dfa58116d3aacc33432a10bc98b418691a0e208006c4b9259f",
+      "targetSchemaVersion": "0006_refinement_templates_reports.sql",
+      "filesCount": 67,
+      "bundleDir": "releases/release-20261014161716-ce02431b90f2/bundle"
+    },
+    {
+      "releaseId": "release-20261014162427-5917df4748f8",
+      "version": "0.1.0",
+      "createdAt": "2026-10-14T16:24:27.217Z",
+      "targetEnvironment": "production",
+      "appImage": "orium-production",
+      "gitCommit": "8556d5d2eba8c06ef519b32e2decb1253c02afd8",
+      "sourceTreeSHA256": "5917df4748f8e810a16a887bff66bf5937e0036b9a206b5dbfa609ba775d08b3",
+      "targetSchemaVersion": "0006_refinement_templates_reports.sql",
+      "filesCount": 67,
+      "bundleDir": "releases/release-20261014162427-5917df4748f8/bundle"
     }
   ]
 }
