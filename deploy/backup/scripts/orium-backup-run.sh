@@ -5,20 +5,26 @@
 # Carrega configuração protegida (sem segredos) e NUNCA imprime credenciais/URLs.
 set -euo pipefail
 
-# Config default; pode ser sobrescrita via ORIUM_BACKUP_CONF (protegida).
+# Config default; pode ser sobrescrita via argumento --config ou ORIUM_BACKUP_CONF.
 CONF="${ORIUM_BACKUP_CONF:-/var/lib/orium-backup/orium-backup.conf}"
+if [[ "${1:-}" == "--config" && -n "${2:-}" ]]; then
+  CONF="$2"
+  shift 2
+fi
 if [[ -f "$CONF" ]]; then
   # shellcheck disable=SC1090
+  set -a
   source "$CONF"
+  set +a
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-STAGE_DIR="${ORIUM_BACKUP_DIR:-/var/lib/orium-backup/staging}"
-LOCK_FILE="${ORIUM_LOCK_FILE:-/var/lib/orium-backup/backup.lock}"
+STAGE_DIR="${ORIUM_STAGE_DIR:-${ORIUM_BACKUP_DIR:-/var/lib/orium-backup/staging}}"
+LOCK_FILE="${ORIUM_LOCK_FILE:-/var/lib/orium-backup/orium-backup.lock}"
 LOCK_TIMEOUT="${ORIUM_LOCK_TIMEOUT_SEC:-600}"
 REMOTE="${ORIUM_RCLONE_CRYPT_REMOTE:-orium-crypt}"
 DRIVEFOLDER="${ORIUM_DRIVE_FOLDER:-OriumSystem}"
-CONTAINER_FRONT="${ORIUM_PG_CONTAINER_FRONT:-}"   # ex.: "docker exec -i orium-postgres"
+CONTAINER_FRONT="${ORIUM_CONTAINER_FRONT:-${ORIUM_PG_CONTAINER_FRONT:-}}"
 
 # porta de saída: acumula falhas, mas sempre propaga (fail-closed).
 RC=0

@@ -1,22 +1,38 @@
 name: phase10-local-gates
 
-# DESCRITIVO — NÃO aprova CI cloud. Este repositório de trabalho (sem .git) não
-# possui o repo/provedor do responsável, logo run_on não substitui gates reais.
-# O pipeline local já é executável e fail-closed sem rede/VPS.
-
+# CI real (Gate 8) da Fase 10 — pipeline de gates fail-closed, executado no
+# GitHub Actions. YAML + execução comprovada por rede/máquina; nenhum segredo
+# passado ao workflow; deploy/ e QA artifacts necessários para a execução.
 on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch: {}
 
 permissions:
   contents: read
 
 jobs:
-  local-pipeline:
+  phase10-ci:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Run fail-closed local pipeline
+          cache: 'pnpm'
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: ESLint (deploy/verification + tests/phase10)
+        run: pnpm exec eslint deploy/verification tests/phase10
+      - name: TypeScript typecheck (root)
+        run: pnpm exec tsc -p tsconfig.json --noEmit
+      - name: Phase 10 test suite
+        run: pnpm vitest run tests/phase10/
+      - name: Release pipeline (fail-closed local)
         run: node deploy/operations/run-pipeline.mjs production

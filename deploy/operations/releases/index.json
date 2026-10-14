@@ -59,6 +59,18 @@
       "targetSchemaVersion": "0005_notifications.sql",
       "filesCount": 58,
       "bundleDir": "releases/release-20261014131457-2ee58a9bacdd/bundle"
+    },
+    {
+      "releaseId": "release-20261014133145-2ee58a9bacdd",
+      "version": "0.1.0",
+      "createdAt": "2026-10-14T13:31:45.319Z",
+      "targetEnvironment": "production",
+      "appImage": "orium-production",
+      "gitCommit": "25089c2deba944341bf4ea0265ee9e79f878e2f4",
+      "sourceTreeSHA256": "2ee58a9bacddc32a410bb8743c148a7bf315fb4e269613d0af73e2fee67643e2",
+      "targetSchemaVersion": "0005_notifications.sql",
+      "filesCount": 58,
+      "bundleDir": "releases/release-20261014133145-2ee58a9bacdd/bundle"
     }
   ]
 }

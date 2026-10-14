@@ -11,3 +11,15 @@ playwright-report/
 *.log
 .local/
 local_backend/
+# Proteção de release/bundle/chaves/artefatos para nunca versionar no GitHub
+deploy/operations/releases/*/bundle/
+deploy/operations/releases/*/*.tar.gz
+*.dump
+*.dump.gz
+*.backup
+*.bak
+*.pem
+*.key
+*.pfx
+*.p12
+.cate/

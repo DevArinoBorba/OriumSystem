@@ -242,3 +242,51 @@ Executado em modo somente-leitura contra os endpoints de produção e os artefat
 4. **Persistência de Evidências Duráveis:**
    - Baseline de probes e release gravado em [`.local/phase10/live-https-probe-result.json`](file:///C:/Users/arino/OneDrive/Documentos/Projetos/OriumSystem/.local/phase10/live-https-probe-result.json).
 
+---
+
+## 7. Janela 3 — Verificação Independente Pós-Deploy na VPS
+
+A verificação independente pós-rollout da Janela 3 foi executada pelo Antigravity QA contra o release `release-20261014133145-2ee58a9bacdd` e o ambiente de produção real após a aplicação das configurações de hardening nos containers `web` e `api` pela Antigravity (`docs/PHASE10-VPS-ROLLOUT-RESULT.md`).
+
+### 7.1. Validação Criptográfica do Release de Produção
+- **Release ID:** `release-20261014133145-2ee58a9bacdd`
+- **Manifesto:** [`manifest.json`](file:///C:/Users/arino/OneDrive/Documentos/Projetos/OriumSystem/deploy/operations/releases/release-20261014133145-2ee58a9bacdd/manifest.json)
+- **Git Commit:** `25089c2deba944341bf4ea0265ee9e79f878e2f4`
+- **Source Tree SHA-256:** `2ee58a9bacddc32a410bb8743c148a7bf315fb4e269613d0af73e2fee67643e2`
+- **Integridade Criptográfica dos Arquivos:** **58/58 arquivos verificados** via `validateReleaseManifest` contra o subdiretório `bundle/`. Checksums SHA-256 e tamanhos em bytes 100% coincidentes (`valid: true`, 0 violações).
+- **Esquema de Rollback:** `rollbackPolicy.schemaDowngradeAllowed === false`, garantindo política fail-closed contra perda acidental de esquema.
+
+### 7.2. Probes Live HTTPS contra Superfícies de Produção
+Executado via `.local/phase10/run-live-https-and-manifest-probe.mjs` contra a infraestrutura ativa:
+
+1. **Superfície Web (`https://app.oriumdigital.tech/`):**
+   - **HTTP Status:** 200 OK
+   - **Acessibilidade:** `reachable: true`
+   - **Conformidade de Cabeçalhos de Segurança:** **100% APROVADO** (`securityValid: true`, 0 violações)
+   - **Cabeçalhos Verificados:**
+     - `strict-transport-security`: `max-age=31536000`
+     - `x-content-type-options`: `nosniff`
+     - `x-frame-options`: `DENY`
+     - `referrer-policy`: `no-referrer`
+     - `cache-control`: `no-store`
+   - *Resultado Comparativo:* A ausência dos cabeçalhos HSTS/XCTO/XFO/RP identificada no diagnóstico pré-deploy da Janela 2 foi completamente sanada pelo rollout de `nginx.conf` da Janela 3.
+
+2. **Superfície API (`https://app.oriumdigital.tech/api/v1/notifications`):**
+   - **HTTP Status:** 401 Unauthorized (resguardando a rota protegida na ausência de autenticação)
+   - **Acessibilidade:** `reachable: true`
+   - **Conformidade de Cabeçalhos de Segurança:** **100% APROVADO** (`securityValid: true`, 0 violações)
+   - **Cabeçalhos Verificados:**
+     - `strict-transport-security`: `max-age=31536000`
+     - `x-content-type-options`: `nosniff, nosniff` (suporte tolerante a múltiplos tokens)
+     - `x-frame-options`: `DENY, DENY`
+     - `referrer-policy`: `no-referrer, no-referrer`
+     - `cache-control`: `no-store`
+     - `content-security-policy`: `default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`
+
+### 7.3. Suíte de Testes e Rigor Técnico
+- **Vitest:** `pnpm vitest run tests/phase10/` — **5 arquivos, 60 testes aprovados, 0 falhas** (exit 0).
+- **ESLint:** `pnpm exec eslint deploy/verification tests/phase10` — 0 erros, 0 avisos.
+- **TypeScript:** `pnpm exec tsc -p tsconfig.json --noEmit` — 0 erros de tipagem.
+- **Artefato de Evidência Atualizado:** [`.local/phase10/live-https-probe-result.json`](file:///C:/Users/arino/OneDrive/Documentos/Projetos/OriumSystem/.local/phase10/live-https-probe-result.json) registra o timestamp e os dados brutos sanitizados da verificação pós-rollout da Janela 3.
+
+

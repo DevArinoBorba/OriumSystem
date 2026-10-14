@@ -48,7 +48,40 @@ EOF
 CRON_TZ=$TZ
 ${MINUTE} ${HOUR} * * * $INVOKE_PATH >> /var/log/orium-backup.log 2>&1
 EOF
-    echo "schedule: arquivo gravado /etc/orium-backup-${fname}.cron (instalação final do link cabe ao operador VPS/Antigravity)"
+    echo "schedule: cron gerado em /etc/orium-backup-${fname}.cron"
+
+    if [[ -d "/etc/systemd/system" ]]; then
+      cat > "/etc/systemd/system/orium-backup.service" <<EOF
+[Unit]
+Description=Backup OriumSystem Diário
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=$INVOKE_PATH
+User=root
+EOF
+
+      cat > "/etc/systemd/system/orium-backup.timer" <<EOF
+[Unit]
+Description=Backup OriumSystem diário (${TZ})
+
+[Timer]
+OnCalendar=*-*-* ${HOUR}:${MINUTE}:00 ${TZ}
+Persistent=true
+Unit=orium-backup.service
+
+[Install]
+WantedBy=timers.target
+EOF
+
+      chmod 644 /etc/systemd/system/orium-backup.service /etc/systemd/system/orium-backup.timer
+      if command -v systemctl >/dev/null 2>&1; then
+        systemctl daemon-reload
+        systemctl enable --now orium-backup.timer
+        echo "schedule: systemd timer orium-backup.timer instalado e ativado"
+      fi
+    fi
     ;;
   *) usage;;
 esac

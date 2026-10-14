@@ -25,6 +25,13 @@ RCLONE="${RCLONE_BIN:-rclone}"
 DRY="${ORIUM_DRY_RUN:-1}"
 TIMEOUT="${ORIUM_DRIVE_TIMEOUT_SEC:-3600}"
 
+echo "drive: modo dryrun=$DRY timeout=$TIMEOUT pasta=$DRIVEFOLDER"
+
+if [[ "$DRY" == "1" ]]; then
+  echo "drive: modo dryrun=$DRY (não envia nem testa remote sem OAuth configurado); ok"
+  exit 0
+fi
+
 CONFIG_ARGS=()
 [[ -n "${ORIUM_RCLONE_CONFIG:-}" ]] && CONFIG_ARGS+=(--config "$ORIUM_RCLONE_CONFIG")
 PWC_ARGS=()
@@ -32,8 +39,6 @@ if [[ -n "${ORIUM_RCLONE_PASSWORD:-}" ]]; then
   PWC_ARGS=(--password-command "printf '%s' \"\$ORIUM_RCLONE_PASSWORD\"")
   export ORIUM_RCLONE_PASSWORD
 fi
-
-echo "drive: modo dryrun=$DRY timeout=$TIMEOUT pasta=$DRIVEFOLDER"
 
 # List real antes (verificação de acesso ao destino isolado, não raiz).
 ${RCLONE} "${CONFIG_ARGS[@]}" "${PWC_ARGS[@]}" lsf "$REMOTE:/$DRIVEFOLDER" >/dev/null 2>&1 \

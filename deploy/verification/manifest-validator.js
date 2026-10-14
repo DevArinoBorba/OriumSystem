@@ -73,11 +73,11 @@ export async function validateReleaseManifest(rawInput, baseDirectory) {
         }
         else {
             const rp = raw.rollbackPolicy;
-            if (typeof rp.previousReleaseId !== 'string' || rp.previousReleaseId.trim().length === 0) {
-                issues.push({ code: 'SCHEMA_VIOLATION', field: 'rollbackPolicy.previousReleaseId', message: 'previousReleaseId é obrigatório' });
+            if (rp.previousReleaseId !== undefined && (typeof rp.previousReleaseId !== 'string' || rp.previousReleaseId.trim().length === 0)) {
+                issues.push({ code: 'SCHEMA_VIOLATION', field: 'rollbackPolicy.previousReleaseId', message: 'previousReleaseId deve ser uma string não vazia quando fornecida' });
             }
-            if (typeof rp.previousVersion !== 'string' || rp.previousVersion.trim().length === 0) {
-                issues.push({ code: 'SCHEMA_VIOLATION', field: 'rollbackPolicy.previousVersion', message: 'previousVersion é obrigatório' });
+            if (rp.previousVersion !== undefined && (typeof rp.previousVersion !== 'string' || rp.previousVersion.trim().length === 0)) {
+                issues.push({ code: 'SCHEMA_VIOLATION', field: 'rollbackPolicy.previousVersion', message: 'previousVersion deve ser uma string não vazia quando fornecida' });
             }
             if (rp.schemaDowngradeAllowed !== false) {
                 issues.push({
@@ -87,9 +87,10 @@ export async function validateReleaseManifest(rawInput, baseDirectory) {
                 });
             }
             rollbackPolicy = {
-                previousReleaseId: String(rp.previousReleaseId),
-                previousVersion: String(rp.previousVersion),
+                previousReleaseId: rp.previousReleaseId !== undefined ? String(rp.previousReleaseId) : undefined,
+                previousVersion: rp.previousVersion !== undefined ? String(rp.previousVersion) : undefined,
                 schemaDowngradeAllowed: false,
+                keepBackups: rp.keepBackups === true,
             };
         }
     }

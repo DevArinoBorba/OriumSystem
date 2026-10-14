@@ -18,12 +18,19 @@ Variáveis:
   ORIUM_RCLONE_PASSWORD    senha da config (opcional, se encriptada)
    - se definida, o script monta um --password-command que lê da própria variável,
      repassada por ambiente; NUNCA aparece em argv/log.
+  ORIUM_DRY_RUN            1 = dryrun, ignora criptografia remota até OAuth configurado
 EOF
   exit 2
 }
 [[ $# -eq 3 ]] || usage
 REMOTE="$1"; LOCALDIR="$2"; DRIVEFOLDER="$3"
 RCLONE="${RCLONE_BIN:-rclone}"
+DRY="${ORIUM_DRY_RUN:-0}"
+
+if [[ "$DRY" == "1" ]]; then
+  echo "crypt: modo dryrun=$DRY (ignorado crypt local até configuração do remote/OAuth); ok"
+  exit 0
+fi
 
 CONFIG_ARGS=()
 [[ -n "${ORIUM_RCLONE_CONFIG:-}" ]] && CONFIG_ARGS+=(--config "$ORIUM_RCLONE_CONFIG")
