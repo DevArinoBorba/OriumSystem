@@ -1,0 +1,117 @@
+services:
+  postgres:
+    image: postgres:17.11-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: orium_prod
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: \${POSTGRES_ADMIN_PASSWORD:?Configure POSTGRES_ADMIN_PASSWORD}
+      ORIUM_MIGRATOR_PASSWORD: \${ORIUM_MIGRATOR_PASSWORD:?Configure ORIUM_MIGRATOR_PASSWORD}
+      ORIUM_APP_PASSWORD: \${ORIUM_APP_PASSWORD:?Configure ORIUM_APP_PASSWORD}
+    volumes:
+      - orium-postgres:/var/lib/postgresql/data
+      - ./db-init/00-roles.sql:/docker-entrypoint-initdb.d/00-roles.sql:ro
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d orium_prod"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  migrate:
+    build:
+      context: ../..
+      dockerfile: deploy/production/Dockerfile
+      target: api
+    restart: "no"
+    environment:
+      NODE_ENV: production
+      MIGRATIONS_FOLDER: /app/db/migrations
+      MIGRATION_APP_ROLE: orium_app
+      MIGRATION_DATABASE_URL: postgresql://orium_migrator:\${ORIUM_MIGRATOR_PASSWORD:?Configure ORIUM_MIGRATOR_PASSWORD}@postgres:5432/orium_prod
+    command: ["node", "dist/cli.js", "migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend
+
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/production/Dockerfile
+      target: api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_HOST: 0.0.0.0
+      API_PORT: "3001"
+      API_ORIGIN: https://app.oriumdigital.tech
+      WEB_ORIGIN: https://app.oriumdigital.tech
+      DATABASE_URL: postgresql://orium_app:\${ORIUM_APP_PASSWORD:?Configure ORIUM_APP_PASSWORD}@postgres:5432/orium_prod
+      BETTER_AUTH_SECRET: \${BETTER_AUTH_SECRET:?Configure BETTER_AUTH_SECRET}
+      LOG_LEVEL: info
+    command: ["node", "dist/server.js"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/production/Dockerfile
+      target: web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - backend
+      - coolify
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.orium-app.rule=Host(`${APP_DOMAIN:?Configure APP_DOMAIN}`)
+      - traefik.http.routers.orium-app.entrypoints=https
+      - traefik.http.routers.orium-app.tls=true
+      - traefik.http.routers.orium-app.tls.certresolver=letsencrypt
+      - traefik.http.routers.orium-app.service=orium-app
+      - traefik.http.services.orium-app.loadbalancer.server.port=8080
+      - traefik.http.routers.orium-app-http.rule=Host(`${APP_DOMAIN:?Configure APP_DOMAIN}`)
+      - traefik.http.routers.orium-app-http.entrypoints=http
+      - traefik.http.routers.orium-app-http.middlewares=orium-app-https
+      - traefik.http.middlewares.orium-app-https.redirectscheme.scheme=https
+      - traefik.docker.network=coolify
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+networks:
+  backend:
+    internal: true
+  coolify:
+    external: true
+    name: coolify
+
+volumes:
+  orium-postgres:

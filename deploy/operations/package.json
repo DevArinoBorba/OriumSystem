@@ -1,0 +1,8 @@
+{
+  "name": "@orium/operations",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Tooling local de empacotamento/verificação de release (Fase 10, OpenCode). Fail-closed, sem dependências externas.",
+  "engines": { "node": ">=24" }
+}

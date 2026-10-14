@@ -1,0 +1,363 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { DashboardItem, DashboardResponse, SessionResponse } from '@orium/contracts';
+import { api, ApiError } from '../api.js';
+import type { DashboardSectionKey } from '../types.js';
+
+interface DashboardViewProps {
+  session: SessionResponse;
+  onUnauthorized: () => void;
+  onOpenItem: (target: { demandId: string; taskId?: string }) => void;
+}
+
+const DAY_LIMIT = 20;
+
+const taskStatusLabels: Record<string, string> = {
+  blocked: 'Aguardando',
+  ready: 'Pronta',
+  in_production: 'Em produção',
+  in_review: 'Em revisão',
+  changes_requested: 'Ajustes pedidos',
+  paused: 'Pausada',
+  completed: 'Concluída',
+};
+
+const priorityLabels: Record<string, string> = {
+  low: 'Baixa',
+  normal: 'Normal',
+  high: 'Alta',
+  urgent: 'Urgente',
+};
+
+function formatDate(calendar: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(calendar);
+  if (!m) return calendar;
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+
+function formatDateTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const day = date.toLocaleDateString('pt-BR', { timeZone: 'America/Cuiaba' });
+  const time = date.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/Cuiaba',
+  });
+  return `${day} às ${time} (horário de Cuiabá)`;
+}
+
+function statusLabelFor(item: DashboardItem): string {
+  if (item.kind === 'demand') {
+    return item.status === 'completed' ? 'Concluído' : 'Aberto';
+  }
+  return taskStatusLabels[item.status] ?? item.status;
+}
+
+type SectionMeta = {
+  key: DashboardSectionKey;
+  title: string;
+  description: string;
+  headline: string; // verb/noun used to describe a single item
+  kindNote?: boolean;
+};
+
+const topSections: SectionMeta[] = [
+  {
+    key: 'production',
+    title: 'Em produção',
+    description: 'Trabalhos com relógio operacional em andamento.',
+    headline: 'Tarefa',
+  },
+  {
+    key: 'awaitingAction',
+    title: 'Dependendo de ação',
+    description: 'Itens aguardando revisão, aprovação, material, retorno ou decisão.',
+    headline: 'Ação pendente',
+  },
+];
+
+const pendingSections: SectionMeta[] = [
+  {
+    key: 'overdueTasks',
+    title: 'Atrasadas na operação',
+    description: 'Tarefas atrasadas no prazo operacional (começaram e não foram concluídas).',
+    headline: 'Atraso operacional',
+  },
+  {
+    key: 'overdueDemands',
+    title: 'Chamados com prazo vencido',
+    description: 'Chamados abertos cujo prazo de entrega já passou.',
+    headline: 'Prazo do chamado vencido',
+  },
+  {
+    key: 'dueToday',
+    title: 'Vencem hoje',
+    description: 'Entregas previstas para o dia de hoje.',
+    headline: 'Vence hoje',
+  },
+  {
+    key: 'upcoming',
+    title: 'Próximos 3 dias',
+    description: 'De amanhã até os próximos três dias.',
+    headline: 'Entrega próxima',
+  },
+  {
+    key: 'urgent',
+    title: 'Urgentes',
+    description: 'Trabalhos de prioridade urgente em aberto.',
+    headline: 'Urgente',
+  },
+];
+
+export function DashboardView({ session, onUnauthorized, onOpenItem }: DashboardViewProps) {
+  const isAdmin = session.roles.includes('administrator');
+  const hasUsersRead = session.permissions.includes('users.read');
+  const [data, setData] = useState<DashboardResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const hasDataRef = useRef(false);
+  const requestRef = useRef<AbortController | null>(null);
+
+  const load = useCallback(
+    async (refresh = false) => {
+      if (refresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+        setError(null);
+      }
+      requestRef.current?.abort();
+      const controller = new AbortController();
+      requestRef.current = controller;
+      try {
+        const response = await api.getDashboard({ limit: DAY_LIMIT }, controller.signal, onUnauthorized);
+        if (requestRef.current === controller && !controller.signal.aborted) {
+          setData(response);
+          setUpdatedAt(response.generatedAt);
+          hasDataRef.current = true;
+          setError(null);
+        }
+      } catch (err) {
+        if (controller.signal.aborted || (err instanceof DOMException && err.name === 'AbortError')) return;
+        if (requestRef.current === controller) {
+          if (err instanceof ApiError && err.status === 403) {
+            setData(null);
+            setUpdatedAt(null);
+            hasDataRef.current = false;
+            setError('Acesso ao Painel foi revogado. Atualize a página ou fale com um administrador.');
+          } else if (hasDataRef.current) {
+            // mantém updatedAt anterior para o label de staleness
+            setError('Não foi possível atualizar o Painel. Mostrando os dados da última atualização.');
+          } else {
+            setError('Não foi possível carregar o Painel. Tente novamente.');
+          }
+        }
+      } finally {
+        if (requestRef.current === controller) {
+          setLoading(false);
+          setRefreshing(false);
+          requestRef.current = null;
+        }
+      }
+    },
+    [onUnauthorized],
+  );
+
+  useEffect(() => {
+    void load();
+    return () => {
+      requestRef.current?.abort();
+    };
+  }, [load]);
+
+  const handleOpen = (item: DashboardItem) => {
+    if (item.kind === 'task') {
+      onOpenItem({ demandId: item.demandId, taskId: item.taskId ?? item.id });
+    } else {
+      onOpenItem({ demandId: item.demandId });
+    }
+  };
+
+  const showWorkload = isAdmin && hasUsersRead && data?.workloadAvailable === true;
+
+  const renderItem = (item: DashboardItem) => (
+    <li key={item.id} className="dashboard-item">
+      <div className="dashboard-item-main">
+        <div className="dashboard-item-title">
+          <span className={`dashboard-kind ${item.kind}`}>{item.kind === 'task' ? 'Tarefa' : 'Chamado'}</span>
+          <span className="dashboard-title-text">{item.title}</span>
+          <span className={`priority-badge ${item.priority}`}>{priorityLabels[item.priority] ?? item.priority}</span>
+        </div>
+        <div className="dashboard-item-meta">
+          {item.demandTitle && <span className="muted-dash">Chamado: <strong>{item.demandTitle}</strong></span>}
+          <span>Cliente: <strong>{item.client.name}</strong></span>
+          <span>Entrega: <strong>{formatDate(item.deliveryDate)}</strong></span>
+          {item.status && <span className={`status-badge ${item.status === 'completed' ? 'complete' : 'open'}`}>{statusLabelFor(item)}</span>}
+          {item.kind === 'task' && item.assignedTo ? (
+            <span>Responsável: <strong>{item.assignedTo.name}</strong></span>
+          ) : null}
+        </div>
+        {item.reason && <p className="dashboard-item-reason">{item.reason}</p>}
+      </div>
+      <button
+        type="button"
+        className="action-btn edit"
+        onClick={() => handleOpen(item)}
+      >
+        {item.kind === 'task' ? 'Abrir tarefa' : 'Abrir chamado'}
+      </button>
+    </li>
+  );
+
+  const renderSection = (meta: SectionMeta) => {
+    const section = data?.sections[meta.key];
+    if (!section) return null;
+    const shown = section.items.length;
+    const truncated = section.total > shown;
+    return (
+      <section className="dashboard-section" aria-labelledby={`section-${meta.key}-heading`}>
+        <div className="section-heading-row">
+          <div>
+            <h2 className="section-heading" id={`section-${meta.key}-heading`}>{meta.title}</h2>
+            <p className="muted-text">{meta.description}</p>
+          </div>
+          <span className="dashboard-count">
+            {section.total} {section.total === 1 ? 'item' : 'itens'}
+            {truncated && <span className="dashboard-limit-note"> · exibindo {shown} de {section.total}</span>}
+          </span>
+        </div>
+        {section.items.length === 0 ? (
+          <div className="empty-state" style={{ marginTop: 12 }}>
+            <p className="empty-title">Nada por aqui no momento.</p>
+            <p className="empty-description">{meta.title} sem itens.</p>
+          </div>
+        ) : (
+          <ul className="dashboard-item-list">
+            {section.items.map(renderItem)}
+          </ul>
+        )}
+      </section>
+    );
+  };
+
+  const renderWorkload = () => {
+    if (!showWorkload || !data) return null;
+    return (
+      <section className="dashboard-section" aria-labelledby="section-workload-heading">
+        <div className="section-heading-row">
+          <div>
+            <h2 className="section-heading" id="section-workload-heading">Carga da equipe</h2>
+            <p className="muted-text">Volume de trabalho atual por pessoa.</p>
+          </div>
+        </div>
+        {data.workload.length === 0 ? (
+          <div className="empty-state" style={{ marginTop: 12 }}>
+            <p className="empty-title">Sem dados de carga.</p>
+            <p className="empty-description">Não há cargas para exibir no momento.</p>
+          </div>
+        ) : (
+          <div className="workload-table-wrap">
+            <table className="workload-table">
+              <thead>
+                <tr>
+                  <th scope="col">Pessoa</th>
+                  <th scope="col" className="text-right">Em produção</th>
+                  <th scope="col" className="text-right">Dependendo de ação</th>
+                  <th scope="col" className="text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.workload.map((row) => (
+                  <tr key={row.userId}>
+                    <td>
+                      {row.name}
+                      {!row.active && <span className="muted-dash"> · inativa(o)</span>}
+                    </td>
+                    <td className="text-right">{row.production}</td>
+                    <td className="text-right">{row.awaitingAction}</td>
+                    <td className="text-right"><strong>{row.total}</strong></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    );
+  };
+
+  const updatedAtLabel = updatedAt
+    ? `${error && hasDataRef.current ? 'Dados da última atualização: ' : 'Atualizado '}${formatDateTime(updatedAt)}`
+    : undefined;
+
+  return (
+    <section className="view-panel" aria-labelledby="dashboard-heading">
+      <div className="panel-header">
+        <div>
+          <h1 id="dashboard-heading">Painel</h1>
+          <p className="panel-subtitle">
+            {data && data.scope === 'assigned'
+              ? 'Visão das entregas atribuídas a você.'
+              : 'Acompanhe a produção, as pendências e a carga da equipe.'}
+          </p>
+        </div>
+        <div className="dashboard-toolbar">
+          {updatedAtLabel && <span className="dashboard-updated-at">{updatedAtLabel}</span>}
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => void load(true)}
+            disabled={loading || refreshing}
+          >
+            {refreshing ? 'Atualizando…' : 'Atualizar'}
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="alert-banner error" role="alert" style={{ marginBottom: 16 }}>
+          <span>{error}</span>
+          <button
+            type="button"
+            className="primary-button small"
+            onClick={() => void load(false)}
+            disabled={loading}
+          >
+            Tentar novamente
+          </button>
+        </div>
+      )}
+
+      {loading && !data ? (
+        <div className="dashboard-skeleton" role="status" aria-live="polite">
+          <span className="sr-only">Carregando o Painel…</span>
+          <div className="skeleton-line" />
+          <div className="skeleton-line" />
+          <div className="skeleton-line" />
+        </div>
+      ) : data ? (
+        <div className="dashboard-sections">
+          {topSections.map(renderSection)}
+
+          <section className="dashboard-section dashboard-section-pending" aria-labelledby="section-pending-heading">
+            <div className="section-heading-row">
+              <div>
+                <h2 className="section-heading" id="section-pending-heading">Pendências</h2>
+                <p className="muted-text">
+                  Atrasos, vencimentos e urgências que pedem atenção.
+                </p>
+              </div>
+            </div>
+            <div className="dashboard-pending-groups">
+              {pendingSections.map(renderSection)}
+            </div>
+          </section>
+
+          {renderWorkload()}
+        </div>
+      ) : null}
+    </section>
+  );
+}

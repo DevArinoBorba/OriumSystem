@@ -1,0 +1,64 @@
+{
+  "releases": [
+    {
+      "releaseId": "release-20261014124323-e558ed3b122d",
+      "version": "0.1.0",
+      "createdAt": "2026-10-14T12:43:23.370Z",
+      "targetEnvironment": "production",
+      "appImage": "orium-production",
+      "gitCommit": null,
+      "sourceTreeSHA256": "e558ed3b122d0e6afe0f3ef93160b42756b7ece245b2bfd7757fe4e64ff00d54",
+      "targetSchemaVersion": "0005_notifications.sql",
+      "filesCount": 58,
+      "bundleDir": "releases/release-20261014124323-e558ed3b122d/bundle"
+    },
+    {
+      "releaseId": "release-20261014124501-e558ed3b122d",
+      "version": "0.1.0",
+      "createdAt": "2026-10-14T12:45:01.087Z",
+      "targetEnvironment": "staging",
+      "appImage": "orium-production",
+      "gitCommit": null,
+      "sourceTreeSHA256": "e558ed3b122d0e6afe0f3ef93160b42756b7ece245b2bfd7757fe4e64ff00d54",
+      "targetSchemaVersion": "0005_notifications.sql",
+      "filesCount": 58,
+      "bundleDir": "releases/release-20261014124501-e558ed3b122d/bundle"
+    },
+    {
+      "releaseId": "release-20261014124545-e558ed3b122d",
+      "version": "0.1.0",
+      "createdAt": "2026-10-14T12:45:45.995Z",
+      "targetEnvironment": "staging",
+      "appImage": "orium-production",
+      "gitCommit": null,
+      "sourceTreeSHA256": "e558ed3b122d0e6afe0f3ef93160b42756b7ece245b2bfd7757fe4e64ff00d54",
+      "targetSchemaVersion": "0005_notifications.sql",
+      "filesCount": 58,
+      "bundleDir": "releases/release-20261014124545-e558ed3b122d/bundle"
+    },
+    {
+      "releaseId": "release-20261014124550-e558ed3b122d",
+      "version": "0.1.0",
+      "createdAt": "2026-10-14T12:45:50.623Z",
+      "targetEnvironment": "production",
+      "appImage": "orium-production",
+      "gitCommit": null,
+      "sourceTreeSHA256": "e558ed3b122d0e6afe0f3ef93160b42756b7ece245b2bfd7757fe4e64ff00d54",
+      "targetSchemaVersion": "0005_notifications.sql",
+      "filesCount": 58,
+      "bundleDir": "releases/release-20261014124550-e558ed3b122d/bundle"
+    },
+    {
+      "releaseId": "release-20261014131457-2ee58a9bacdd",
+      "version": "0.1.0",
+      "createdAt": "2026-10-14T13:14:57.177Z",
+      "targetEnvironment": "production",
+      "appImage": "orium-production",
+      "gitCommit": null,
+      "sourceTreeSHA256": "2ee58a9bacddc32a410bb8743c148a7bf315fb4e269613d0af73e2fee67643e2",
+      "targetSchemaVersion": "0005_notifications.sql",
+      "filesCount": 58,
+      "bundleDir": "releases/release-20261014131457-2ee58a9bacdd/bundle"
+    }
+  ]
+}

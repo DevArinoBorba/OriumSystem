@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "name": "OriumSystem",
+  "color": "",
+  "dockState": {
+    "zones": {
+      "left": {
+        "position": "left",
+        "visible": false,
+        "size": 260,
+        "layout": null
+      },
+      "right": {
+        "position": "right",
+        "visible": false,
+        "size": 260,
+        "layout": null
+      },
+      "bottom": {
+        "position": "bottom",
+        "visible": false,
+        "size": 240,
+        "layout": null
+      },
+      "center": {
+        "position": "center",
+        "visible": true,
+        "size": 0,
+        "layout": {
+          "type": "tabs",
+          "id": "5d5ecc42-15ce-43d6-89c2-1d63d547b50f",
+          "panelIds": [
+            "280e00a2-3c1d-4c61-885a-7d3d26e95e11"
+          ],
+          "activeIndex": 0
+        }
+      }
+    }
+  },
+  "panels": {
+    "280e00a2-3c1d-4c61-885a-7d3d26e95e11": {
+      "type": "canvas",
+      "title": "Canvas"
+    }
+  },
+  "canvases": {
+    "280e00a2-3c1d-4c61-885a-7d3d26e95e11": {
+      "id": "280e00a2-3c1d-4c61-885a-7d3d26e95e11",
+      "canvasNodes": {},
+      "zoomLevel": 1,
+      "viewportOffset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  },
+  "emptyLayout": true
+}

@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+.pnpm-store/
+.npm-cache/
+coverage/
+test-results/
+playwright-report/
+*.log
+.local/
+local_backend/

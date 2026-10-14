@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# orium-backup.conf.example
+# Parâmetros operacionais do backup. SEM segredos NESTE ARQUIVO.
+# Segredos/credenciais/chave de recuperação vivem em configuração protegida
+# fora do repositório (ex.: /home/<usuario>/.local/orium-backup/ com ACL exclusiva).
+#
+# Para usar: copiar para um local protegido e referenciar via ORIUM_BACKUP_CONF.
+
+# --- Backup local ---
+export ORIUM_PG_HOST="${ORIUM_PG_HOST:-127.0.0.1}"
+export ORIUM_PG_PORT="${ORIUM_PG_PORT:-5432}"
+export ORIUM_PG_USER="${ORIUM_PG_USER:-postgres}"
+export ORIUM_PG_DB="${ORIUM_PG_DB:-orium_prod}"
+# pg_dump (binário/conta) NÃO é configurado aqui; o script resolve pelo PATH.
+# ORIUM_PG_HOST/URL do banco é usada via variável de ambiente PGPASSWORD, nunca em argv.
+
+# --- Diretório local de backup ---
+export ORIUM_BACKUP_DIR="${ORIUM_BACKUP_DIR:-/var/lib/orium-backup/staging}"
+
+# --- Retenção ---
+# Default: 30 dias (RPO 24h, diário 03:00 America/Cuiaba). Alterável.
+# Habilitação de REMOÇÃO exige dryrun negativo + allowlist + destino isolado
+# comprovados e gate Codex; por padrão NÃO remove (dryrun).
+export ORIUM_RETENTION_DAYS="${ORIUM_RETENTION_DAYS:-30}"
+export ORIUM_RETENTION_MODE="${ORIUM_RETENTION_MODE:-dryrun}"   # dryrun|enabled
+export ORIUM_RETENTION_ALLOWLIST="${ORIUM_RETENTION_ALLOWLIST:-allowlist.conf}" # arquivo de allowlist de nomes do projeto (só o próprio mecanismo apaga).
+
+# --- Drive ---
+export ORIUM_DRIVE_FOLDER="${ORIUM_DRIVE_FOLDER:-OriumSystem}"  # pasta exclusiva no Drive
+export ORIUM_DRIVE_SCOPE="${ORIUM_DRIVE_SCOPE:-drive.file}"      # mínimo: só arquivos criados pelo app
+export ORIUM_DRY_RUN="${ORIUM_DRY_RUN:-1}"                       # 1 = drive não envia (prova local)
+
+# --- Schedule ---
+export ORIUM_SCHEDULE_MINUTE="${ORIUM_SCHEDULE_MINUTE:-0}"
+export ORIUM_SCHEDULE_HOUR="${ORIUM_SCHEDULE_HOUR:-3}"
+export ORIUM_TZ="${ORIUM_TZ:-America/Cuiaba}"
+
+# --- Lock / tempo ---
+export ORIUM_LOCK_FILE="${ORIUM_LOCK_FILE:-/var/lib/orium-backup/backup.lock}"
+export ORIUM_LOCK_TIMEOUT_SEC="${ORIUM_LOCK_TIMEOUT_SEC:-600}"
+
+# --- Timeout de operações (segundos) ---
+export ORIUM_DUMP_TIMEOUT_SEC="${ORIUM_DUMP_TIMEOUT_SEC:-1800}"
+export ORIUM_DRIVE_TIMEOUT_SEC="${ORIUM_DRIVE_TIMEOUT_SEC:-3600}"
+
+# --- Freshness (monitoramento) ---
+export ORIUM_FRESHNESS_FILE="${ORIUM_FRESHNESS_FILE:-/var/lib/orium-backup/freshness.json}"
+export ORIUM_FRESHNESS_RPO_SEC="${ORIUM_FRESHNESS_RPO_SEC:-86400}"   # RPO 24h

@@ -1,0 +1,20 @@
+{
+  "name": "@orium/api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "node --watch --env-file=../../.env dist/server.js"
+  },
+  "dependencies": {
+    "@orium/contracts": "workspace:*",
+    "better-auth": "1.7.7",
+    "drizzle-orm": "0.45.3",
+    "fastify": "5.12.5",
+    "pg": "8.23.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": { "@types/pg": "8.23.1" }
+}

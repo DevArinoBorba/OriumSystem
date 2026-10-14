@@ -1,0 +1,45 @@
+name: orium-local
+services:
+  postgres:
+    image: postgres:17.11-alpine
+    environment:
+      POSTGRES_DB: orium_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?Set a local password in .env}
+      ORIUM_MIGRATOR_PASSWORD: ${POSTGRES_MIGRATOR_PASSWORD:?Set a local password in .env}
+      ORIUM_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:?Set a local password in .env}
+    ports: ["127.0.0.1:${POSTGRES_PORT:-55432}:5432"]
+    volumes:
+      - orium-dev:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d orium_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging:
+      driver: json-file
+      options: { max-size: "5m", max-file: "2" }
+  postgres-test:
+    image: postgres:17.11-alpine
+    environment:
+      POSTGRES_DB: orium_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${TEST_POSTGRES_ADMIN_PASSWORD:?Set a distinct test password in .env}
+      ORIUM_MIGRATOR_PASSWORD: ${TEST_POSTGRES_MIGRATOR_PASSWORD:?Set a distinct test password in .env}
+      ORIUM_APP_PASSWORD: ${TEST_POSTGRES_APP_PASSWORD:?Set a distinct test password in .env}
+    ports: ["127.0.0.1:5433:5432"]
+    volumes:
+      - orium-test:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d orium_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging:
+      driver: json-file
+      options: { max-size: "5m", max-file: "2" }
+volumes:
+  orium-dev:
+  orium-test:

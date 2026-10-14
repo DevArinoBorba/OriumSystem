@@ -1,0 +1,22 @@
+name: phase10-local-gates
+
+# DESCRITIVO — NÃO aprova CI cloud. Este repositório de trabalho (sem .git) não
+# possui o repo/provedor do responsável, logo run_on não substitui gates reais.
+# O pipeline local já é executável e fail-closed sem rede/VPS.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  local-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Run fail-closed local pipeline
+        run: node deploy/operations/run-pipeline.mjs production

@@ -1,0 +1,8 @@
+{
+  "from": "release-20261014124550-e558ed3b122d",
+  "to": "release-20261014124545-e558ed3b122d",
+  "appliedAt": "2026-10-14T12:46:06.625Z",
+  "verifiedFiles": 58,
+  "targetSchemaVersion": "0005_notifications.sql",
+  "schemaDowngrade": false
+}
