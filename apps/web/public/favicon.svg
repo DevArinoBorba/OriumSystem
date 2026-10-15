@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="oriumFavPurple" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#7000ff" />
+      <stop offset="100%" stop-color="#a855f7" />
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="#09080e" />
+  <rect width="126" height="126" x="1" y="1" rx="27" fill="none" stroke="#a855f7" stroke-width="2" stroke-opacity="0.35" />
+  <!-- O Ring -->
+  <path d="M64 16 C38 16, 22 36, 22 64 C22 92, 38 112, 64 112 C90 112, 106 92, 106 64 C106 36, 90 16, 64 16 Z M64 30 C80 30, 91 44, 91 64 C91 84, 80 98, 64 98 C48 98, 37 84, 37 64 C37 44, 48 30, 64 30 Z" fill="#ffffff" />
+  <!-- Diagonal Slash -->
+  <path d="M42 88 L89 48 L78 41 L37 80 Z" fill="url(#oriumFavPurple)" />
+</svg>

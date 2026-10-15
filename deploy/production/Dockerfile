@@ -9,6 +9,7 @@ COPY packages/contracts/src/index.ts ./packages/contracts/src/index.ts
 COPY apps/api/package.json apps/api/tsconfig.json ./apps/api/
 COPY apps/api/src/ ./apps/api/src/
 COPY apps/web/package.json apps/web/tsconfig.json apps/web/index.html ./apps/web/
+COPY apps/web/public/ ./apps/web/public/
 COPY apps/web/src/ ./apps/web/src/
 COPY db/migrations/ ./db/migrations/
 RUN pnpm install --frozen-lockfile
