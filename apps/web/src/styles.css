@@ -591,49 +591,21 @@ button:disabled {
 .orium-brand-logo {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
   user-select: none;
 }
 
-.orium-logo-mark {
-  flex-shrink: 0;
+.orium-header-logo {
+  height: 34px;
+  width: auto;
+  max-width: 190px;
+  object-fit: contain;
   display: block;
-  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
-.brand-logo-button:hover .orium-logo-mark {
-  transform: scale(1.06);
-}
-
-.orium-ring-path {
-  transition: fill 0.2s ease;
-}
-
-.orium-brand-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1;
-  gap: 2px;
-  text-align: left;
-}
-
-.orium-brand-name {
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 1.12rem;
-  letter-spacing: 0.18em;
-  color: var(--color-text-main);
-  text-transform: uppercase;
-}
-
-.orium-brand-tagline {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 0.58rem;
-  letter-spacing: 0.44em;
-  color: var(--color-primary);
-  text-transform: uppercase;
-  padding-left: 2px;
+.brand-logo-button:hover .orium-header-logo {
+  transform: scale(1.03);
+  opacity: 0.95;
 }
 
 /* 2. Header Center: Centralized Navigation */
