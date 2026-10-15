@@ -93,6 +93,16 @@ export function Header({
             Painel
           </button>
         )}
+        {hasDemandsRead && hasTasksRead && (
+          <button
+            type="button"
+            className={`nav-tab ${activeTab === 'mobile' ? 'active' : ''}`}
+            onClick={() => onSelectTab('mobile')}
+            aria-current={activeTab === 'mobile' ? 'page' : undefined}
+          >
+            App Rápido
+          </button>
+        )}
         {hasClientsRead && (
           <button
             type="button"

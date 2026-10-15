@@ -101,6 +101,13 @@ import {
   getHermesStatus,
 } from './vault.js';
 import {
+  getVapidConfig,
+  savePushSubscription,
+  removePushSubscription,
+  dispatchPushToUser,
+  dispatchPendingNotificationsPush,
+} from './push.js';
+import {
   listDemands,
   createDemand,
   getDemandById,
@@ -810,6 +817,55 @@ export async function buildApp({ config, database, logger }: Options) {
     if (!identity.roles.includes('administrator')) throw new AppError(403, 'FORBIDDEN');
     const params = z.object({ id: z.string().uuid() }).parse(request.params);
     return deleteClientCredential(database, params.id);
+  });
+
+  // Fase 8 — Web Push em Segundo Plano (VAPID RFC 8292 + AES-128-GCM RFC 8291)
+  app.get('/api/v1/push/vapid-public-key', async (request) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'protected.read');
+    return { publicKey: getVapidConfig().publicKey, enabled: true };
+  });
+
+  app.post('/api/v1/push/subscribe', async (request) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'protected.read');
+    const input = z
+      .object({
+        endpoint: z.string().url().max(2048),
+        keys: z.object({
+          p256dh: z.string().min(16).max(512),
+          auth: z.string().min(8).max(256),
+        }),
+        userAgent: z.string().max(512).optional().nullable(),
+      })
+      .parse(request.body);
+    return savePushSubscription(database, identity.user.id, input);
+  });
+
+  app.post('/api/v1/push/unsubscribe', async (request) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'protected.read');
+    const input = z.object({ endpoint: z.string().url().max(2048) }).parse(request.body);
+    return removePushSubscription(database, identity.user.id, input.endpoint);
+  });
+
+  app.post('/api/v1/push/test', async (request) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'protected.read');
+    return dispatchPushToUser(database, identity.user.id, {
+      title: '🔔 Orium — Push em Segundo Plano Ativo!',
+      body: `Olá ${identity.user.name}, seu celular está pronto para receber alertas mesmo com a tela bloqueada ou app fechado.`,
+      tag: `orium-push-test-${Date.now()}`,
+      url: '/',
+    });
+  });
+
+  const pushInterval = setInterval(() => {
+    void dispatchPendingNotificationsPush(database);
+  }, 8000);
+  pushInterval.unref();
+  app.addHook('onClose', async () => {
+    clearInterval(pushInterval);
   });
 
   await app.ready();

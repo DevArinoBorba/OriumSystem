@@ -13,6 +13,8 @@ import { ProfileView } from './components/ProfileView.js';
 import { ReportsView } from './components/ReportsView.js';
 import { TeamView } from './components/TeamView.js';
 import { VaultView } from './components/VaultView.js';
+import { MobileAppView } from './components/MobileAppView.js';
+import { ensurePushSubscription, triggerServerTestPush } from './pushClient.js';
 import type { ActiveTab, MaterialNavigationTarget } from './types.js';
 
 type ViewState = 'checking' | 'signed-out' | 'signed-in';
@@ -31,8 +33,11 @@ export function App() {
   const [unreadCount, setUnreadCount] = useState<number | null>(null);
   const [busySignOut, setBusySignOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
+  const [showPushOnboarding, setShowPushOnboarding] = useState(false);
+  const [activatingPush, setActivatingPush] = useState(false);
   const activeRequestRef = useRef<AbortController | null>(null);
   const unreadRequestRef = useRef<AbortController | null>(null);
+  const prevUnreadCountRef = useRef<number | null>(null);
 
   useEffect(() => {
     const onSessionUpdated = (event: Event) => {
@@ -43,6 +48,36 @@ export function App() {
     };
     window.addEventListener('orium:session-updated', onSessionUpdated);
     return () => window.removeEventListener('orium:session-updated', onSessionUpdated);
+  }, []);
+
+  useEffect(() => {
+    if (view !== 'signed-in') return;
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+
+    if (Notification.permission === 'granted') {
+      void ensurePushSubscription({ requestPermission: false });
+    } else if (
+      Notification.permission === 'default' &&
+      sessionStorage.getItem('orium_push_prompt_dismissed') !== '1'
+    ) {
+      const timer = window.setTimeout(() => {
+        setShowPushOnboarding(true);
+      }, 900);
+      return () => window.clearTimeout(timer);
+    }
+  }, [view]);
+
+  useEffect(() => {
+    const onAppInstalled = () => {
+      if (typeof Notification !== 'undefined' && Notification.permission !== 'granted') {
+        sessionStorage.removeItem('orium_push_prompt_dismissed');
+        setShowPushOnboarding(true);
+      } else if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        void ensurePushSubscription({ requestPermission: false });
+      }
+    };
+    window.addEventListener('appinstalled', onAppInstalled);
+    return () => window.removeEventListener('appinstalled', onAppInstalled);
   }, []);
 
   const handleUnauthorized = useCallback(() => {
@@ -82,7 +117,29 @@ export function App() {
         },
       );
       if (unreadRequestRef.current === controller && !controller.signal.aborted) {
+        const prev = prevUnreadCountRef.current;
+        prevUnreadCountRef.current = response.unreadCount;
         setUnreadCount(response.unreadCount);
+        if (
+          prev !== null &&
+          response.unreadCount > prev &&
+          typeof Notification !== 'undefined' &&
+          Notification.permission === 'granted'
+        ) {
+          const diff = response.unreadCount - prev;
+          const title = 'Orium System — Nova Notificação';
+          const body =
+            diff === 1
+              ? 'Você recebeu 1 nova atualização operacional.'
+              : `Você recebeu ${diff} novas atualizações operacionais.`;
+          if ('serviceWorker' in navigator) {
+            void navigator.serviceWorker.ready
+              .then((reg) => reg.showNotification(title, { body, icon: '/favicon-192x192.png' }))
+              .catch(() => new Notification(title, { body, icon: '/favicon-192x192.png' }));
+          } else {
+            new Notification(title, { body, icon: '/favicon-192x192.png' });
+          }
+        }
       }
     } catch (error) {
       if (error instanceof ApiError && error.status === 403
@@ -249,6 +306,16 @@ export function App() {
           />
         )}
 
+        {activeTab === 'mobile' && hasDemandsRead && hasTasksRead && (
+          <MobileAppView
+            session={session}
+            unreadCount={unreadCount}
+            onUnauthorized={handleUnauthorized}
+            onOpenItem={handleOpenItem}
+            onOpenNotifications={() => setActiveTab('notifications')}
+          />
+        )}
+
         {activeTab === 'clients' && hasClientsRead && (
           <ClientsView
             session={session}
@@ -319,6 +386,149 @@ export function App() {
           </section>
         )}
       </main>
+
+      {/* Barra Inferior Mobile Nativa (Fase 8 — Aplicativo Interno) */}
+      <nav className="mobile-bottom-nav" aria-label="Navegação rápida mobile">
+        {hasDemandsRead && hasTasksRead && (
+          <button
+            type="button"
+            className={`mobile-bottom-tab ${activeTab === 'mobile' ? 'active' : ''}`}
+            onClick={() => setActiveTab('mobile')}
+          >
+            <span className="mobile-bottom-icon">⚡</span>
+            <span>Meu Dia</span>
+          </button>
+        )}
+        {hasDemandsRead && hasTasksRead && (
+          <button
+            type="button"
+            className={`mobile-bottom-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
+            onClick={() => setActiveTab('dashboard')}
+          >
+            <span className="mobile-bottom-icon">📊</span>
+            <span>Painel</span>
+          </button>
+        )}
+        {hasDemandsRead && (
+          <button
+            type="button"
+            className={`mobile-bottom-tab ${activeTab === 'demands' ? 'active' : ''}`}
+            onClick={() => setActiveTab('demands')}
+          >
+            <span className="mobile-bottom-icon">📋</span>
+            <span>Demandas</span>
+          </button>
+        )}
+        {hasClientsRead && (
+          <button
+            type="button"
+            className={`mobile-bottom-tab ${activeTab === 'clients' ? 'active' : ''}`}
+            onClick={() => setActiveTab('clients')}
+          >
+            <span className="mobile-bottom-icon">🏢</span>
+            <span>Clientes</span>
+          </button>
+        )}
+        {hasNotificationsRead && (
+          <button
+            type="button"
+            className={`mobile-bottom-tab ${activeTab === 'notifications' ? 'active' : ''}`}
+            onClick={() => setActiveTab('notifications')}
+          >
+            <span className="mobile-bottom-icon">
+              🔔{typeof unreadCount === 'number' && unreadCount > 0 ? `(${unreadCount})` : ''}
+            </span>
+            <span>Alertas</span>
+          </button>
+        )}
+      </nav>
+
+      {/* Modal Automático de Ativação de Notificações em Segundo Plano (Fase 8 PWA) */}
+      {showPushOnboarding && (
+        <div
+          className="push-onboarding-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="push-onboarding-title"
+        >
+          <div className="push-onboarding-modal">
+            <div className="push-onboarding-header">
+              <span className="push-onboarding-icon-wrap" aria-hidden="true">
+                <span className="push-onboarding-icon">🔔</span>
+              </span>
+              <div>
+                <span className="push-onboarding-badge">
+                  APLICATIVO ORIUM • SEGUNDO PLANO
+                </span>
+                <h2 id="push-onboarding-title" className="push-onboarding-title">
+                  Ativar Notificações no Celular?
+                </h2>
+              </div>
+            </div>
+
+            <p className="push-onboarding-desc">
+              Ative os alertas em segundo plano para receber avisos de{' '}
+              <strong>novas tarefas, revisões, prazos e ações do Orium Agent</strong> diretamente na
+              tela de bloqueio do seu Android ou iPhone — mesmo com o aplicativo fechado.
+            </p>
+
+            <div className="push-onboarding-actions">
+              <button
+                type="button"
+                className="btn-primary push-onboarding-primary-btn"
+                disabled={activatingPush}
+                onClick={() => {
+                  setActivatingPush(true);
+                  void ensurePushSubscription({ requestPermission: true })
+                    .then(async (res) => {
+                      if (res.ok) {
+                        await triggerServerTestPush().catch(() => null);
+                      }
+                    })
+                    .finally(() => {
+                      setActivatingPush(false);
+                      setShowPushOnboarding(false);
+                    });
+                }}
+              >
+                {activatingPush ? (
+                  <>
+                    <span
+                      style={{
+                        width: 16,
+                        height: 16,
+                        border: '2px solid rgba(255,255,255,0.3)',
+                        borderTopColor: '#fff',
+                        borderRadius: '50%',
+                        display: 'inline-block',
+                        animation: 'spin 0.8s linear infinite',
+                        marginRight: 8,
+                      }}
+                    />
+                    Ativando notificações...
+                  </>
+                ) : (
+                  <>
+                    <span>🔔</span> Permitir Notificações em Segundo Plano
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                className="btn-secondary push-onboarding-secondary-btn"
+                disabled={activatingPush}
+                onClick={() => {
+                  sessionStorage.setItem('orium_push_prompt_dismissed', '1');
+                  setShowPushOnboarding(false);
+                }}
+              >
+                Agora não
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

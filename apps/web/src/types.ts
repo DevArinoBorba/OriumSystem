@@ -54,6 +54,7 @@ import type {
 
 export type ActiveTab =
   | 'dashboard'
+  | 'mobile'
   | 'clients'
   | 'team'
   | 'demands'

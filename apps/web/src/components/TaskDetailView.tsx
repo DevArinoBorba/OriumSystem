@@ -692,8 +692,8 @@ export function TaskDetailView({
       )}
 
       {conflictMessage && (
-        <div className="conflict-panel" role="alert" style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '16px', borderRadius: '8px', marginBottom: '16px' }}>
-          <p style={{ color: '#92400e', margin: '0 0 12px', fontWeight: 600 }}>{conflictMessage}</p>
+        <div className="conflict-panel" role="alert" style={{ background: 'var(--color-warning-light)', border: '1px solid var(--color-warning)', padding: '16px', borderRadius: '12px', marginBottom: '16px' }}>
+          <p style={{ color: 'var(--color-warning-text)', margin: '0 0 12px', fontWeight: 600 }}>{conflictMessage}</p>
           <button
             type="button"
             className="secondary-button small"
@@ -745,17 +745,17 @@ export function TaskDetailView({
         })()}
 
         {task.pauseRequestedAt && task.status === 'in_production' && (
-          <div style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
-            <label style={{ color: '#92400e' }}>Pausa Solicitada pelo Colaborador</label>
-            <p style={{ margin: '4px 0 0', color: '#78350f' }}>Motivo: {task.pauseReason || 'Não informado'}</p>
-            <small className="muted">Aguardando decisão da administração.</small>
+          <div style={{ background: 'var(--color-warning-light)', border: '1px solid var(--color-warning)', padding: '14px', borderRadius: '10px', marginBottom: '16px' }}>
+            <label style={{ color: 'var(--color-warning-text)', fontWeight: 600 }}>Pausa Solicitada pelo Colaborador</label>
+            <p style={{ margin: '4px 0 0', color: 'var(--color-text-main)' }}>Motivo: {task.pauseReason || 'Não informado'}</p>
+            <small style={{ color: 'var(--color-text-muted)' }}>Aguardando decisão da administração.</small>
           </div>
         )}
 
         {task.status === 'paused' && task.pauseReason && (
-          <div style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
-            <label>Tarefa em Pausa</label>
-            <p style={{ margin: '4px 0 0' }}>Motivo: {task.pauseReason}</p>
+          <div style={{ background: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', padding: '14px', borderRadius: '10px', marginBottom: '16px' }}>
+            <label style={{ color: 'var(--color-text-main)', fontWeight: 600 }}>Tarefa em Pausa</label>
+            <p style={{ margin: '4px 0 0', color: 'var(--color-text-muted)' }}>Motivo: {task.pauseReason}</p>
           </div>
         )}
       </section>

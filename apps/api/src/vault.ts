@@ -349,7 +349,7 @@ export async function getHermesStatus(database: Database): Promise<HermesStatusR
 
   return {
     installed: true,
-    version: 'Hermes Agent v2026.4 (NousResearch)',
+    version: 'Orium Agent v2026.10 (Fase 9 Completa — WhatsApp + Obsidian + Google Drive)',
     omnirouteUrl,
     omnirouteHealthy,
     whatsappConfigured: true,
@@ -357,10 +357,12 @@ export async function getHermesStatus(database: Database): Promise<HermesStatusR
     totalCredentials,
     totalClients,
     capabilities: [
-      'Consulta de clientes ativos, escopo contratado e equipe responsável',
-      'Acesso seguro ao Cofre de Credenciais (HostGator, WordPress, cPanel, Meta Ads, etc.) com descriptografia AES-256-GCM sob demanda para Administradores',
-      'Resumo em tempo real de demandas, tarefas atrasadas, gargalos e prazos no WhatsApp',
-      'Roteamento inteligente de LLMs via OmniRoute (OpenAI, Claude, Gemini, DeepSeek, Groq) com fallback automático',
+      'Identidade executiva Orium Agent no WhatsApp (+55 67 9656-7255) com observação silenciosa em grupos de clientes (responde apenas quando mencionado)',
+      'Consulta e escrita transacional: criar clientes, abrir demandas, instanciar templates operacionais, criar/atualizar tarefas e comentar com auditoria em demand_event',
+      'Acesso e gravação segura no Cofre de Credenciais (AES-256-GCM / HKDF-SHA256) sob demanda exclusiva para Administradores',
+      'Segundo Cérebro persistente em Vault Obsidian (/data/orium/obsidian-vault + plugin hwiki) sincronizado automaticamente a cada 15 minutos',
+      'Arquivamento inteligente no Google Drive (Agent/<Cliente>/<Categoria>/) via rclone com auto-exclusão de cache local na VPS (0 bytes acumulados)',
+      'Roteamento multi-modelo resiliente via OmniRoute (Gemini 3 Flash, Claude Sonnet 4.6, MiniMax M2.7, DeepSeek V4 Flash) com fallback automático',
     ],
   };
 }
