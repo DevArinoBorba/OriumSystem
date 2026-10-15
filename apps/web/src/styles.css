@@ -430,7 +430,8 @@ button:disabled {
 }
 
 .login-brand-logo {
-  height: 36px;
+  height: 42px;
+  max-width: 240px;
   width: auto;
   object-fit: contain;
   display: block;
@@ -444,7 +445,8 @@ button:disabled {
    Header Buttons & Quick Actions
    ========================================================================== */
 
-.header-icon-button {
+.header-icon-button,
+.theme-toggle-button {
   background: var(--color-surface-elevated);
   border: 1px solid var(--color-border);
   color: var(--color-text-main);
@@ -463,18 +465,40 @@ button:disabled {
   margin: 0;
 }
 
-.header-icon-button:hover:not(:disabled) {
+.header-icon-button:hover:not(:disabled),
+.theme-toggle-button:hover:not(:disabled) {
   border-color: var(--color-primary-border);
   color: var(--color-primary);
   background: var(--color-primary-light);
   transform: translateY(-1px);
 }
 
-.header-icon-button.active {
+.header-icon-button.active,
+.theme-toggle-button.active {
   background: var(--color-primary-light);
   color: var(--color-primary);
   border-color: var(--color-primary-border);
   box-shadow: 0 0 14px -4px rgba(168, 85, 247, 0.4);
+}
+
+[data-theme="dark"] .theme-toggle-button {
+  color: #fbbf24;
+}
+
+[data-theme="dark"] .theme-toggle-button:hover:not(:disabled) {
+  color: #fef08a;
+  border-color: rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.1);
+}
+
+[data-theme="light"] .theme-toggle-button {
+  color: var(--color-primary);
+}
+
+[data-theme="light"] .theme-toggle-button:hover:not(:disabled) {
+  color: var(--color-primary-hover);
+  border-color: var(--color-primary-border);
+  background: var(--color-primary-light);
 }
 
 .action-icon,

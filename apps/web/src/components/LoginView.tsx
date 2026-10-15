@@ -63,15 +63,14 @@ export function LoginView({ onSuccess, activeRequestRef }: LoginViewProps) {
           <div className="login-brand-wrapper">
             <img
               src={theme === 'dark' ? logoHorizontal : logoHorizontalLight}
-              alt="Orium Digital"
+              alt="Orium System"
               className="login-brand-logo"
-              height="36"
+              height="42"
             />
-            <p className="eyebrow">OriumSystem</p>
           </div>
           <button
             type="button"
-            className="theme-toggle-button login-theme-toggle"
+            className="header-icon-button theme-toggle-button login-theme-toggle"
             onClick={toggleTheme}
             aria-label={theme === 'dark' ? 'Alternar para tema claro' : 'Alternar para tema escuro'}
             title={theme === 'dark' ? 'Alternar para tema claro' : 'Alternar para tema escuro'}
