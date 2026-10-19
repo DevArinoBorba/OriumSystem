@@ -739,6 +739,8 @@ export const materialSchema = z.object({
   description: z.string().trim().max(4000).default(''),
   category: materialCategorySchema,
   url: materialUrlSchema,
+  driveFileId: z.string().nullable().optional(),
+  drivePath: z.string().nullable().optional(),
   archivedAt: z.string().datetime({ offset: true }).nullable(),
   version: z.number().int().positive(),
   createdAt: z.string().datetime({ offset: true }),
@@ -766,6 +768,79 @@ export const listMaterialsResponseSchema = z.object({
 }).strict();
 export type ListMaterialsResponse = z.infer<typeof listMaterialsResponseSchema>;
 
+// ================= Espelho do Google Drive (Agent/) =================
+
+/** Caminho relativo a Agent/: segmentos sem "." / ".." e sem barras nas pontas. */
+export const drivePathSchema = z.string().trim().max(1000).refine(
+  (value) => value === '' || value.split('/').every((part) => part.length > 0 && part !== '.' && part !== '..' && !/[\\\u0000]/.test(part)),
+  'Caminho inválido.',
+);
+
+export const driveFileStatusSchema = z.enum(['to_publish', 'published']);
+export type DriveFileStatus = z.infer<typeof driveFileStatusSchema>;
+
+export const driveFileLinkSchema = z.object({
+  materialId: z.string().uuid(),
+  taskId: z.string().uuid().nullable(),
+  taskTitle: z.string().nullable(),
+  demandId: z.string().uuid().nullable(),
+  demandTitle: z.string().nullable(),
+  assigneeName: z.string().nullable(),
+}).strict();
+
+export const driveEntrySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  path: z.string(),
+  isDir: z.boolean(),
+  size: z.number().int().nullable(),
+  mimeType: z.string().nullable(),
+  modifiedAt: z.string().nullable(),
+  status: driveFileStatusSchema.nullable(),
+  links: z.array(driveFileLinkSchema),
+}).strict();
+export type DriveEntry = z.infer<typeof driveEntrySchema>;
+
+export const driveListResponseSchema = z.object({
+  configured: z.boolean(),
+  path: z.string(),
+  entries: z.array(driveEntrySchema),
+}).strict();
+export type DriveListResponse = z.infer<typeof driveListResponseSchema>;
+
+export const driveMyFilesResponseSchema = z.object({
+  configured: z.boolean(),
+  tasks: z.array(z.object({
+    taskId: z.string().uuid(),
+    taskTitle: z.string(),
+    taskStatus: taskStatusSchema,
+    deliveryDate: calendarDateSchema,
+    demandId: z.string().uuid(),
+    demandTitle: z.string(),
+    clientName: z.string(),
+    files: z.array(driveEntrySchema),
+  }).strict()),
+}).strict();
+export type DriveMyFilesResponse = z.infer<typeof driveMyFilesResponseSchema>;
+
+export const setDriveFileStatusSchema = z.object({
+  fileId: z.string().trim().min(1).max(200),
+  status: driveFileStatusSchema.nullable(),
+}).strict();
+export type SetDriveFileStatusInput = z.infer<typeof setDriveFileStatusSchema>;
+
+export const linkDriveFileSchema = z.object({
+  path: drivePathSchema,
+  taskId: z.string().uuid(),
+}).strict();
+export type LinkDriveFileInput = z.infer<typeof linkDriveFileSchema>;
+
+export const driveUploadResponseSchema = z.object({
+  uploaded: z.array(driveEntrySchema),
+  duplicates: z.array(z.object({ name: z.string(), existingPath: z.string() }).strict()),
+}).strict();
+export type DriveUploadResponse = z.infer<typeof driveUploadResponseSchema>;
+
 export const createMaterialSchema = z.object({
   clientId: z.string().uuid(),
   demandId: z.string().uuid().nullable().optional(),
@@ -774,6 +849,9 @@ export const createMaterialSchema = z.object({
   description: z.string().trim().max(4000).optional().default(''),
   category: materialCategorySchema,
   url: materialUrlSchema,
+  /** Arquivo do espelho do Google Drive (ID estável e caminho relativo a Agent/). */
+  driveFileId: z.string().trim().min(1).max(200).optional(),
+  drivePath: drivePathSchema.optional(),
 }).strict();
 export type CreateMaterialInput = z.infer<typeof createMaterialSchema>;
 

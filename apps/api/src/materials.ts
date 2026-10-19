@@ -34,6 +34,8 @@ interface MaterialRow {
   description: string;
   category: 'brand' | 'preview' | 'published' | 'drive' | 'asset' | 'reference';
   url: string;
+  drive_file_id?: string | null;
+  drive_path?: string | null;
   archived_at: Date | string | null;
   version: number;
   created_at: Date | string;
@@ -115,6 +117,8 @@ function formatMaterial(row: MaterialRow): Material {
     description: row.description ?? '',
     category: row.category,
     url: row.url,
+    driveFileId: row.drive_file_id ?? null,
+    drivePath: row.drive_path ?? null,
     archivedAt: row.archived_at ? new Date(row.archived_at).toISOString() : null,
     version: row.version,
     createdAt: new Date(row.created_at).toISOString(),
@@ -391,9 +395,9 @@ export async function createMaterial(
     const insertSql = `
       INSERT INTO material (
         id, client_id, demand_id, task_id, created_by_user_id,
-        title, description, category, url, archived_at, version,
+        title, description, category, url, drive_file_id, drive_path, archived_at, version,
         created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULL, 1, now(), now())
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULL, 1, now(), now())
       RETURNING *
     `;
 
@@ -407,9 +411,20 @@ export async function createMaterial(
       input.description ?? '',
       input.category,
       input.url,
+      input.driveFileId ?? null,
+      input.drivePath ?? null,
     ]);
 
     const createdRow = insertRes.rows[0]!;
+
+    // Arquivo do Drive vinculado a uma tarefa entra como "a publicar" (sem sobrescrever status existente).
+    if (input.driveFileId && input.taskId) {
+      await client.query(`
+        INSERT INTO drive_file_status (drive_file_id, status, updated_by_user_id, updated_at)
+        VALUES ($1, 'to_publish', $2, now())
+        ON CONFLICT (drive_file_id) DO NOTHING
+      `, [input.driveFileId, actor.id]);
+    }
 
     // 4. Gravação de Evento no Histórico
     const changes = {

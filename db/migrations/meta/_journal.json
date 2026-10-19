@@ -9,6 +9,7 @@
     { "idx": 4, "version": "7", "when": 1791200004000, "tag": "0004_identity_audit", "breakpoints": true },
     { "idx": 5, "version": "7", "when": 1791200005000, "tag": "0005_notifications", "breakpoints": true },
     { "idx": 6, "version": "7", "when": 1791200006000, "tag": "0006_refinement_templates_reports", "breakpoints": true },
-    { "idx": 7, "version": "7", "when": 1791200007000, "tag": "0007_phase2a_clients_scope_team", "breakpoints": true }
+    { "idx": 7, "version": "7", "when": 1791200007000, "tag": "0007_phase2a_clients_scope_team", "breakpoints": true },
+    { "idx": 8, "version": "7", "when": 1791200008000, "tag": "0008_drive_mirror", "breakpoints": true }
   ]
 }

@@ -42,6 +42,8 @@ import {
   createDemandTemplateInputSchema,
   updateDemandTemplateInputSchema,
   instantiateDemandTemplateInputSchema,
+  setDriveFileStatusSchema,
+  linkDriveFileSchema,
   reportQuerySchema,
   updateProfileSchema,
   changePasswordSchema,
@@ -143,6 +145,20 @@ import {
   getClientTimeline,
 } from './materials.js';
 import { AppError } from './errors.js';
+import {
+  completeUpload,
+  createHttpDriveGateway,
+  linkDriveFile,
+  listDrive,
+  myDriveFiles,
+  openDriveFile,
+  pruneStaleUploads,
+  receiveUploadChunk,
+  setDriveFileStatus,
+  UPLOAD_CHUNK_BYTES,
+  type DriveGateway,
+} from './drive.js';
+import { Readable } from 'node:stream';
 
 // Phase 6 / Increment 1 (docs/PHASE6-IMPLEMENTATION-CONTRACT.md). The API never serves documents,
 // so the CSP denies everything; it does not protect the web document itself.
@@ -155,9 +171,9 @@ const apiSecurityHeaders = {
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
 } as const;
 
-type Options = { config: Config; database: Database; logger?: FastifyServerOptions['logger'] };
+type Options = { config: Config; database: Database; logger?: FastifyServerOptions['logger']; driveGateway?: DriveGateway | null };
 
-export async function buildApp({ config, database, logger }: Options) {
+export async function buildApp({ config, database, logger, driveGateway }: Options) {
   await assertApplicationDatabase(database);
   const app = Fastify({
     bodyLimit: 16384,
@@ -179,7 +195,11 @@ export async function buildApp({ config, database, logger }: Options) {
     reply.headers(apiSecurityHeaders);
     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
       if (request.headers.origin !== config.WEB_ORIGIN || request.headers['sec-fetch-site'] === 'cross-site') throw new AppError(403, 'ORIGIN_REJECTED');
-      if (!String(request.headers['content-type'] ?? '').startsWith('application/json')) throw new AppError(415, 'JSON_REQUIRED');
+      const contentType = String(request.headers['content-type'] ?? '');
+      const isUploadChunk = request.method === 'POST' && request.url.split('?')[0] === '/api/v1/drive/upload/chunk';
+      if (isUploadChunk ? !contentType.startsWith('application/octet-stream') : !contentType.startsWith('application/json')) {
+        throw new AppError(415, 'JSON_REQUIRED');
+      }
     }
   });
   app.setErrorHandler((error, request, reply) => {
@@ -193,6 +213,70 @@ export async function buildApp({ config, database, logger }: Options) {
     return reply.code(500).send({ error: { code: 'INTERNAL_ERROR', requestId: request.id } });
   });
   app.setNotFoundHandler((request, reply) => reply.code(404).send({ error: { code: 'NOT_FOUND', requestId: request.id } }));
+
+  // ================= Espelho do Google Drive (Agent/) =================
+  const drive = driveGateway === undefined ? createHttpDriveGateway() : driveGateway;
+  app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer', bodyLimit: UPLOAD_CHUNK_BYTES }, (_request, body, done) => done(null, body));
+  const pruneTimer = setInterval(() => { void pruneStaleUploads().catch(() => undefined); }, 3600_000);
+  pruneTimer.unref();
+
+  app.get('/api/v1/drive/list', async (request) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'materials.read');
+    const query = z.object({ path: z.string().max(1000).optional() }).parse(request.query);
+    return listDrive(database, drive, identity, query.path ?? '');
+  });
+
+  app.get('/api/v1/drive/my-files', async (request) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'materials.read');
+    return myDriveFiles(database, drive, identity);
+  });
+
+  app.get('/api/v1/drive/file', async (request, reply) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'materials.read');
+    const query = z.object({ path: z.string().max(1000), download: z.enum(['1']).optional() }).parse(request.query);
+    const range = typeof request.headers.range === 'string' ? request.headers.range : undefined;
+    const file = await openDriveFile(database, drive, identity, query.path, range, query.download === '1');
+    reply.code(file.status).headers(file.headers);
+    return reply.send(file.body ? Readable.fromWeb(file.body as import('node:stream/web').ReadableStream) : null);
+  });
+
+  app.post('/api/v1/drive/status', async (request) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'materials.read');
+    return setDriveFileStatus(database, drive, identity, setDriveFileStatusSchema.parse(request.body));
+  });
+
+  app.post('/api/v1/drive/link', async (request, reply) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'materials.write');
+    const result = await linkDriveFile(database, drive, identity, linkDriveFileSchema.parse(request.body));
+    return reply.code(201).send(result);
+  });
+
+  app.post('/api/v1/drive/upload/chunk', async (request) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'materials.write');
+    const query = z.object({ uploadId: z.string().uuid(), index: z.coerce.number().int().min(0).max(10_000) }).parse(request.query);
+    if (!Buffer.isBuffer(request.body)) throw new AppError(400, 'INVALID_INPUT');
+    return receiveUploadChunk(identity, query.uploadId, query.index, request.body);
+  });
+
+  app.post('/api/v1/drive/upload/complete', async (request, reply) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'materials.write');
+    const input = z.object({
+      uploadId: z.string().uuid(),
+      folder: z.string().max(1000),
+      fileName: z.string().trim().min(1).max(255),
+      subject: z.string().trim().max(80).optional(),
+      numbered: z.boolean().optional(),
+    }).strict().parse(request.body);
+    const result = await completeUpload(database, drive, identity, input);
+    return reply.code(result.uploaded.length > 0 ? 201 : 200).send(result);
+  });
 
   app.get('/health/live', async () => ({ status: 'ok' }));
   app.get('/health/ready', async (_request, reply) => {

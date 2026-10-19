@@ -32,7 +32,7 @@ export async function migrateDatabase(url: string, appRole = 'orium_app'): Promi
         );
         CREATE INDEX IF NOT EXISTS idx_client_credential_client_id ON public.client_credential(client_id);
       `);
-      await client.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON auth_user, auth_account, auth_session, auth_verification, user_role, role_permission, client, client_team_member, client_scope_item, client_credential, demand, task, task_requirement, task_dependency, task_comment, demand_event, material, material_event, demand_template, demand_template_task, demand_template_task_requirement, demand_template_task_dependency TO "${appRole}"`);
+      await client.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON auth_user, auth_account, auth_session, auth_verification, user_role, role_permission, client, client_team_member, client_scope_item, client_credential, demand, task, task_requirement, task_dependency, task_comment, demand_event, material, material_event, drive_file_status, demand_template, demand_template_task, demand_template_task_requirement, demand_template_task_dependency TO "${appRole}"`);
       await client.query(`GRANT SELECT ON role, permission TO "${appRole}"`);
       // Identity audit is append-only for the application: SELECT/INSERT plus the fixed retention routine.
       await client.query(`

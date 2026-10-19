@@ -374,7 +374,7 @@ const handlers: Record<string, Handler> = {
 
   async 'add-material'(database, identity, input) {
     requirePermission(identity, 'materials.write');
-    const data = createMaterialSchema.parse(pick(input, ['clientId', 'demandId', 'taskId', 'title', 'description', 'category', 'url']));
+    const data = createMaterialSchema.parse(pick(input, ['clientId', 'demandId', 'taskId', 'title', 'description', 'category', 'url', 'driveFileId', 'drivePath']));
     return { ok: true, ...(await createMaterial(database, identity, data)) };
   },
 };
