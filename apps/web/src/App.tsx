@@ -1,21 +1,27 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import type { SessionResponse } from '@orium/contracts';
 import { api, ApiError } from './api.js';
 import { Header } from './components/Header.js';
 import { LoginView } from './components/LoginView.js';
-import { BackupsView } from './components/BackupsView.js';
 import { ClientsView } from './components/ClientsView.js';
 import { DashboardView } from './components/DashboardView.js';
 import { DemandsView } from './components/DemandsView.js';
-import { MaterialsView } from './components/MaterialsView.js';
-import { NotificationsView } from './components/NotificationsView.js';
-import { ProfileView } from './components/ProfileView.js';
-import { ReportsView } from './components/ReportsView.js';
-import { TeamView } from './components/TeamView.js';
-import { VaultView } from './components/VaultView.js';
-import { MobileAppView } from './components/MobileAppView.js';
 import { ensurePushSubscription, triggerServerTestPush } from './pushClient.js';
+import { parseRoute, routePath } from './router.js';
+import type { AppRoute } from './router.js';
 import type { ActiveTab, MaterialNavigationTarget } from './types.js';
+
+// Telas menos frequentes carregam sob demanda para reduzir o bundle inicial.
+const BackupsView = lazy(() => import('./components/BackupsView.js').then((m) => ({ default: m.BackupsView })));
+const MaterialsView = lazy(() => import('./components/MaterialsView.js').then((m) => ({ default: m.MaterialsView })));
+const MobileAppView = lazy(() => import('./components/MobileAppView.js').then((m) => ({ default: m.MobileAppView })));
+const NotificationsView = lazy(() =>
+  import('./components/NotificationsView.js').then((m) => ({ default: m.NotificationsView })),
+);
+const ProfileView = lazy(() => import('./components/ProfileView.js').then((m) => ({ default: m.ProfileView })));
+const ReportsView = lazy(() => import('./components/ReportsView.js').then((m) => ({ default: m.ReportsView })));
+const TeamView = lazy(() => import('./components/TeamView.js').then((m) => ({ default: m.TeamView })));
+const VaultView = lazy(() => import('./components/VaultView.js').then((m) => ({ default: m.VaultView })));
 
 type ViewState = 'checking' | 'signed-out' | 'signed-in';
 
@@ -24,11 +30,56 @@ type DemandNavigationTarget = {
   taskId?: string;
 };
 
+function canAccessTab(tab: ActiveTab, session: SessionResponse): boolean {
+  const perms = session.permissions;
+  const isAdmin = session.roles.includes('administrator');
+  const operational = perms.includes('demands.read') && perms.includes('tasks.read');
+  switch (tab) {
+    case 'dashboard':
+    case 'mobile':
+    case 'notifications':
+      return operational;
+    case 'clients':
+      return perms.includes('clients.read');
+    case 'demands':
+      return perms.includes('demands.read');
+    case 'reports':
+      return isAdmin && perms.includes('demands.read');
+    case 'materials':
+      return perms.includes('materials.read');
+    case 'team':
+      return perms.includes('users.read');
+    case 'vault':
+    case 'backups':
+      return isAdmin;
+    case 'profile':
+      return true;
+  }
+}
+
+function initialTabFor(permissions: string[]): ActiveTab {
+  if (permissions.includes('demands.read') && permissions.includes('tasks.read')) {
+    return 'dashboard';
+  }
+  if (permissions.includes('clients.read')) return 'clients';
+  if (permissions.includes('demands.read')) return 'demands';
+  if (permissions.includes('materials.read')) return 'materials';
+  if (permissions.includes('users.read')) return 'team';
+  return 'dashboard';
+}
+
+/** Respeita o endereço atual (deep link, F5) quando a conta pode acessá-lo. */
+function resolveInitialRoute(session: SessionResponse): AppRoute {
+  const fromUrl = parseRoute(window.location.pathname);
+  if (fromUrl && canAccessTab(fromUrl.tab, session)) return fromUrl;
+  return { tab: initialTabFor(session.permissions), demandId: null, taskId: null };
+}
+
 export function App() {
   const [view, setView] = useState<ViewState>('checking');
   const [session, setSession] = useState<SessionResponse | null>(null);
-  const [activeTab, setActiveTab] = useState<ActiveTab>('clients');
-  const [demandNavTarget, setDemandNavTarget] = useState<DemandNavigationTarget | null>(null);
+  const [route, setRoute] = useState<AppRoute>({ tab: 'clients', demandId: null, taskId: null });
+  const activeTab = route.tab;
   const [materialNavTarget, setMaterialNavTarget] = useState<MaterialNavigationTarget | null>(null);
   const [unreadCount, setUnreadCount] = useState<number | null>(null);
   const [busySignOut, setBusySignOut] = useState(false);
@@ -82,23 +133,73 @@ export function App() {
 
   const handleUnauthorized = useCallback(() => {
     setSession(null);
-    setDemandNavTarget(null);
     setMaterialNavTarget(null);
     setUnreadCount(null);
     setView('signed-out');
   }, []);
 
-  const handleOpenItem = useCallback((target: DemandNavigationTarget) => {
-    setDemandNavTarget(target);
-    setActiveTab('demands');
+  const navigate = useCallback((next: AppRoute, options?: { replace?: boolean }) => {
+    const path = routePath(next);
+    if (path !== window.location.pathname) {
+      if (options?.replace) {
+        window.history.replaceState(null, '', path);
+      } else {
+        window.history.pushState(null, '', path);
+      }
+    }
+    setRoute((prev) =>
+      prev.tab === next.tab && prev.demandId === next.demandId && prev.taskId === next.taskId ? prev : next,
+    );
   }, []);
 
-  const clearDemandNav = useCallback(() => setDemandNavTarget(null), []);
+  const selectTab = useCallback(
+    (tab: ActiveTab) => navigate({ tab, demandId: null, taskId: null }),
+    [navigate],
+  );
+
+  // Botões voltar/avançar do navegador e gesto de voltar no celular.
+  useEffect(() => {
+    if (view !== 'signed-in' || !session) return;
+    const onPopState = () => {
+      const next = parseRoute(window.location.pathname);
+      if (next && canAccessTab(next.tab, session)) {
+        setRoute(next);
+      } else {
+        navigate(resolveInitialRoute(session), { replace: true });
+      }
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [view, session, navigate]);
+
+  // Clique em notificação push com o app já aberto: o service worker pede a navegação.
+  useEffect(() => {
+    if (view !== 'signed-in' || !session || !('serviceWorker' in navigator)) return;
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; url?: string } | null;
+      if (data?.type !== 'orium:navigate' || typeof data.url !== 'string') return;
+      const next = parseRoute(new URL(data.url, window.location.origin).pathname);
+      if (next && canAccessTab(next.tab, session)) navigate(next);
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+  }, [view, session, navigate]);
+
+  const handleOpenItem = useCallback(
+    (target: DemandNavigationTarget) =>
+      navigate({ tab: 'demands', demandId: target.demandId, taskId: target.taskId ?? null }),
+    [navigate],
+  );
+
+  const handleDemandNavigate = useCallback(
+    (demandId: string | null, taskId: string | null) => navigate({ tab: 'demands', demandId, taskId }),
+    [navigate],
+  );
 
   const handleOpenMaterials = useCallback((target: MaterialNavigationTarget) => {
     setMaterialNavTarget(target);
-    setActiveTab('materials');
-  }, []);
+    selectTab('materials');
+  }, [selectTab]);
 
   const clearMaterialNav = useCallback(() => setMaterialNavTarget(null), []);
 
@@ -172,17 +273,6 @@ export function App() {
     };
   }, [view, refreshUnread]);
 
-  const initialTabFor = (permissions: string[]): ActiveTab => {
-    if (permissions.includes('demands.read') && permissions.includes('tasks.read')) {
-      return 'dashboard';
-    }
-    if (permissions.includes('clients.read')) return 'clients';
-    if (permissions.includes('demands.read')) return 'demands';
-    if (permissions.includes('materials.read')) return 'materials';
-    if (permissions.includes('users.read')) return 'team';
-    return 'dashboard';
-  };
-
   useEffect(() => {
     const controller = new AbortController();
     activeRequestRef.current = controller;
@@ -190,16 +280,14 @@ export function App() {
     void api
       .getMe(controller.signal, () => {
         setSession(null);
-        setDemandNavTarget(null);
         setMaterialNavTarget(null);
         setUnreadCount(null);
         setView('signed-out');
       })
       .then((current) => {
-        setDemandNavTarget(null);
         setMaterialNavTarget(null);
         setSession(current);
-        setActiveTab(initialTabFor(current.permissions));
+        navigate(resolveInitialRoute(current), { replace: true });
         setView('signed-in');
       })
       .catch((error: unknown) => {
@@ -211,7 +299,7 @@ export function App() {
       controller.abort();
       activeRequestRef.current?.abort();
     };
-  }, []);
+  }, [navigate]);
 
   async function handleSignOut() {
     const controller = new AbortController();
@@ -223,7 +311,6 @@ export function App() {
       const response = await api.signOut(controller.signal);
       if (response.ok || response.status === 401) {
         setSession(null);
-        setDemandNavTarget(null);
         setMaterialNavTarget(null);
         setUnreadCount(null);
         setView('signed-out');
@@ -243,12 +330,11 @@ export function App() {
   }
 
   function handleLoginSuccess(newSession: SessionResponse) {
-    setDemandNavTarget(null);
     setMaterialNavTarget(null);
     setSession(newSession);
     setUnreadCount(null);
     setSignOutError(null);
-    setActiveTab(initialTabFor(newSession.permissions));
+    navigate(resolveInitialRoute(newSession), { replace: true });
     setView('signed-in');
   }
 
@@ -277,7 +363,7 @@ export function App() {
       <Header
         session={session}
         activeTab={activeTab}
-        onSelectTab={setActiveTab}
+        onSelectTab={selectTab}
         onSignOut={() => void handleSignOut()}
         busy={busySignOut}
         unreadCount={unreadCount}
@@ -298,6 +384,7 @@ export function App() {
           </div>
         )}
 
+        <Suspense fallback={<p className="status" aria-live="polite">Carregando…</p>}>
         {activeTab === 'dashboard' && hasDemandsRead && hasTasksRead && (
           <DashboardView
             session={session}
@@ -312,7 +399,7 @@ export function App() {
             unreadCount={unreadCount}
             onUnauthorized={handleUnauthorized}
             onOpenItem={handleOpenItem}
-            onOpenNotifications={() => setActiveTab('notifications')}
+            onOpenNotifications={() => selectTab('notifications')}
           />
         )}
 
@@ -328,9 +415,9 @@ export function App() {
           <DemandsView
             session={session}
             onUnauthorized={handleUnauthorized}
-            initialDemandId={demandNavTarget?.demandId ?? null}
-            initialTaskId={demandNavTarget?.taskId ?? null}
-            onNavigationConsumed={clearDemandNav}
+            routeDemandId={route.demandId}
+            routeTaskId={route.taskId}
+            onNavigate={handleDemandNavigate}
             onOpenMaterials={handleOpenMaterials}
           />
         )}
@@ -375,6 +462,7 @@ export function App() {
         {activeTab === 'profile' && (
           <ProfileView session={session} onUnauthorized={handleUnauthorized} />
         )}
+        </Suspense>
 
         {/* Fallback if user lacks permissions for all tabs */}
         {activeTab !== 'profile' && !hasClientsRead && !hasDemandsRead && !hasUsersRead && !hasMaterialsRead && (
@@ -393,7 +481,7 @@ export function App() {
           <button
             type="button"
             className={`mobile-bottom-tab ${activeTab === 'mobile' ? 'active' : ''}`}
-            onClick={() => setActiveTab('mobile')}
+            onClick={() => selectTab('mobile')}
           >
             <span className="mobile-bottom-icon">⚡</span>
             <span>Meu Dia</span>
@@ -403,7 +491,7 @@ export function App() {
           <button
             type="button"
             className={`mobile-bottom-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
-            onClick={() => setActiveTab('dashboard')}
+            onClick={() => selectTab('dashboard')}
           >
             <span className="mobile-bottom-icon">📊</span>
             <span>Painel</span>
@@ -413,7 +501,7 @@ export function App() {
           <button
             type="button"
             className={`mobile-bottom-tab ${activeTab === 'demands' ? 'active' : ''}`}
-            onClick={() => setActiveTab('demands')}
+            onClick={() => selectTab('demands')}
           >
             <span className="mobile-bottom-icon">📋</span>
             <span>Demandas</span>
@@ -423,7 +511,7 @@ export function App() {
           <button
             type="button"
             className={`mobile-bottom-tab ${activeTab === 'clients' ? 'active' : ''}`}
-            onClick={() => setActiveTab('clients')}
+            onClick={() => selectTab('clients')}
           >
             <span className="mobile-bottom-icon">🏢</span>
             <span>Clientes</span>
@@ -433,7 +521,7 @@ export function App() {
           <button
             type="button"
             className={`mobile-bottom-tab ${activeTab === 'notifications' ? 'active' : ''}`}
-            onClick={() => setActiveTab('notifications')}
+            onClick={() => selectTab('notifications')}
           >
             <span className="mobile-bottom-icon">
               🔔{typeof unreadCount === 'number' && unreadCount > 0 ? `(${unreadCount})` : ''}

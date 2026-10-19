@@ -11,6 +11,7 @@ import {
   type Task,
 } from '@orium/contracts';
 import { api, ApiError } from '../api.js';
+import { DeadlineDate } from './DeadlineDate.js';
 import { TaskDetailView } from './TaskDetailView.js';
 import { UseTemplateModal } from './UseTemplateModal.js';
 import { ManageTemplatesModal } from './ManageTemplatesModal.js';
@@ -25,10 +26,11 @@ import type {
 interface DemandsViewProps {
   session: SessionResponse;
   onUnauthorized: () => void;
-  /** Navegação externa (ex.: Painel) para abrir um chamado/tarefa sem duplicar lógica. */
-  initialDemandId?: string | null;
-  initialTaskId?: string | null;
-  onNavigationConsumed?: () => void;
+  /** Chamado/tarefa indicados pelo endereço (/demandas/:id/tarefas/:taskId). */
+  routeDemandId?: string | null;
+  routeTaskId?: string | null;
+  /** Informa a seleção atual para manter o endereço sincronizado. */
+  onNavigate?: (demandId: string | null, taskId: string | null) => void;
   onOpenMaterials?: (target: { clientId?: string; demandId?: string; taskId?: string }) => void;
 }
 
@@ -61,9 +63,9 @@ const priorityLabels: Record<DemandPriorityFilter, string> = {
 export function DemandsView({
   session,
   onUnauthorized,
-  initialDemandId,
-  initialTaskId,
-  onNavigationConsumed,
+  routeDemandId = null,
+  routeTaskId = null,
+  onNavigate,
   onOpenMaterials,
 }: DemandsViewProps) {
   const isAdmin = session.roles.includes('administrator');
@@ -253,6 +255,16 @@ export function DemandsView({
     };
   }, [page, status, priority, appliedSearch, loadDemands]);
 
+  // Busca enquanto digita (com atraso curto); Enter continua aplicando na hora.
+  useEffect(() => {
+    if (searchQuery === appliedSearch) return;
+    const timer = window.setTimeout(() => {
+      setPage(1);
+      setAppliedSearch(searchQuery);
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery, appliedSearch]);
+
   // ============ Detail loader ============
   const loadDemandDetail = useCallback(
     async (id: string, refreshInPlace = false) => {
@@ -302,28 +314,46 @@ export function DemandsView({
     };
   }, []);
 
-  // Navegação externa (ex.: Painel): abre um chamado opcionalmente posicionando uma tarefa.
-  // O backend revalida permissões no getDemand — não burla a autorização existente.
-  // Guarda de geração: a continuação após o await só roda se ainda for o alvo atual
-  // (não aborta o request legítimo do loadDemandDetail de outra geração).
+  // Sincronização com o endereço: deep link, F5, voltar/avançar e navegação externa (Painel,
+  // notificações). O backend revalida permissões no getDemand — não burla a autorização.
+  // Enquanto o chamado do endereço carrega, a seleção intermediária não é reportada.
+  const selectionRef = useRef<{ demandId: string | null; taskId: string | null }>({ demandId: null, taskId: null });
+  const routeSyncRef = useRef(false);
   useEffect(() => {
-    if (!initialDemandId) return;
+    selectionRef.current = { demandId: selectedDemandId, taskId: selectedTaskId };
+  }, [selectedDemandId, selectedTaskId]);
+
+  useEffect(() => {
+    const current = selectionRef.current;
+    if (routeDemandId === current.demandId && routeTaskId === current.taskId) return;
+    if (!routeDemandId) {
+      setSelectedDemandId(null);
+      setSelectedTaskId(null);
+      return;
+    }
+    if (routeDemandId === current.demandId) {
+      setSelectedTaskId(routeTaskId);
+      return;
+    }
     let cancelled = false;
+    routeSyncRef.current = true;
     void (async () => {
-      setSelectedDemandId(initialDemandId);
-      await loadDemandDetail(initialDemandId);
+      setSelectedDemandId(routeDemandId);
+      await loadDemandDetail(routeDemandId);
       if (cancelled) return;
-      if (initialTaskId) {
-        setSelectedTaskId(initialTaskId);
-      }
-      if (!cancelled) {
-        onNavigationConsumed?.();
-      }
+      setSelectedTaskId(routeTaskId);
+      routeSyncRef.current = false;
     })();
     return () => {
       cancelled = true;
+      routeSyncRef.current = false;
     };
-  }, [initialDemandId, initialTaskId, loadDemandDetail, onNavigationConsumed]);
+  }, [routeDemandId, routeTaskId, loadDemandDetail]);
+
+  useEffect(() => {
+    if (routeSyncRef.current) return;
+    onNavigate?.(selectedDemandId, selectedTaskId);
+  }, [selectedDemandId, selectedTaskId, onNavigate]);
 
   // ============ History loader ============
   async function openHistory() {
@@ -956,7 +986,9 @@ export function DemandsView({
                         <span className={`priority-badge ${d.priority}`}>{priorityLabels[d.priority]}</span>
                       </td>
                       <td>
-                        <span className={d.status === 'open' ? 'date-value' : 'muted-dash'}>{d.deliveryDate}</span>
+                        <span className={d.status === 'open' ? 'date-value' : 'muted-dash'}>
+                          <DeadlineDate date={d.deliveryDate} done={d.status !== 'open'} />
+                        </span>
                       </td>
                       <td>
                         <span className={`status-badge ${d.status === 'completed' ? 'complete' : 'open'}`}>
@@ -1189,7 +1221,7 @@ export function DemandsView({
               <>
                 {demand.client.name} • Prioridade{' '}
                 <span className={`priority-badge ${demand.priority}`}>{priorityLabels[demand.priority]}</span>{' '}
-                • Entrega geral: <strong>{demand.deliveryDate}</strong>
+                • Entrega geral: <strong><DeadlineDate date={demand.deliveryDate} done={demand.status !== 'open'} /></strong>
                 {' • '}
                 <span className={`status-badge ${demand.status === 'completed' ? 'complete' : 'open'}`}>
                   {demandStatusLabel(demand)}
@@ -1675,7 +1707,7 @@ export function DemandsView({
                             <span>Responsável: <strong>{userName(task.assignedToUserId)}</strong></span>
                           )}
                           {isAdmin && <span className="muted-dash">•</span>}
-                          <span>Entrega: <strong>{task.deliveryDate}</strong></span>
+                          <span>Entrega: <strong><DeadlineDate date={task.deliveryDate} done={task.status === 'completed'} /></strong></span>
                           {task.acceptedAt && <span className="muted-dash">• Aceite registrado</span>}
                         </div>
                       </div>

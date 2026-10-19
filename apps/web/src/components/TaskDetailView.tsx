@@ -7,6 +7,7 @@ import type {
   TaskComment,
 } from '@orium/contracts';
 import { api, ApiError } from '../api.js';
+import { DeadlineDate } from './DeadlineDate.js';
 import type { UserListItem } from '../types.js';
 
 const MAX_PRINTS_PER_MESSAGE = 4;
@@ -663,7 +664,7 @@ export function TaskDetailView({
             <span className="eyebrow">Tarefa</span>
             <h1 style={{ fontSize: '1.5rem', margin: '4px 0 8px' }}>{task.title}</h1>
             <p className="muted" style={{ margin: 0 }}>
-              Responsável: <strong>{assigneeName}</strong> | Entrega: <strong>{task.deliveryDate}</strong>
+              Responsável: <strong>{assigneeName}</strong> | Entrega: <strong><DeadlineDate date={task.deliveryDate} done={task.status === 'completed'} /></strong>
             </p>
           </div>
 

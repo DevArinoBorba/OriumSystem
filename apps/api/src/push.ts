@@ -272,95 +272,38 @@ export async function dispatchPushToUser(
   return { sent, failed, totalDevices: subsRes.rows.length };
 }
 
+const pushTitles: Record<string, string> = {
+  task_assigned: '📌 Nova tarefa atribuída a você',
+  task_review_submitted: '🔎 Tarefa aguardando sua revisão',
+  task_review_approved: '✅ Sua tarefa foi aprovada!',
+  task_review_rejected: '⚠️ Ajustes solicitados na tarefa',
+  task_pause_requested: '⏸️ Pedido de pausa em tarefa',
+  task_pause_approved: '⏸️ Pausa de tarefa aprovada',
+  task_pause_rejected: '▶️ Pedido de pausa recusado',
+  task_unblocked: '🔓 Tarefa desbloqueada e pronta!',
+  deadline_approaching: '⏰ Prazo próximo de entrega',
+  deadline_overdue: '🚨 Prazo vencido — atenção imediata',
+};
+
 function formatNotificationPushPayload(row: {
   id: string;
   kind: string;
+  demand_id: string;
+  task_id: string | null;
   demand_title: string;
   task_title: string | null;
 }): WebPushPayload {
   const subject = row.task_title
     ? `${row.task_title} (${row.demand_title})`
     : row.demand_title;
-
-  switch (row.kind) {
-    case 'task_assigned':
-      return {
-        title: '📌 Nova tarefa atribuída a você',
-        body: subject,
-        tag: `orium-notif-${row.id}`,
-        url: '/',
-      };
-    case 'task_review_submitted':
-      return {
-        title: '🔎 Tarefa aguardando sua revisão',
-        body: subject,
-        tag: `orium-notif-${row.id}`,
-        url: '/',
-      };
-    case 'task_review_approved':
-      return {
-        title: '✅ Sua tarefa foi aprovada!',
-        body: subject,
-        tag: `orium-notif-${row.id}`,
-        url: '/',
-      };
-    case 'task_review_rejected':
-      return {
-        title: '⚠️ Ajustes solicitados na tarefa',
-        body: subject,
-        tag: `orium-notif-${row.id}`,
-        url: '/',
-      };
-    case 'task_pause_requested':
-      return {
-        title: '⏸️ Pedido de pausa em tarefa',
-        body: subject,
-        tag: `orium-notif-${row.id}`,
-        url: '/',
-      };
-    case 'task_pause_approved':
-      return {
-        title: '⏸️ Pausa de tarefa aprovada',
-        body: subject,
-        tag: `orium-notif-${row.id}`,
-        url: '/',
-      };
-    case 'task_pause_rejected':
-      return {
-        title: '▶️ Pedido de pausa recusado',
-        body: subject,
-        tag: `orium-notif-${row.id}`,
-        url: '/',
-      };
-    case 'task_unblocked':
-      return {
-        title: '🔓 Tarefa desbloqueada e pronta!',
-        body: subject,
-        tag: `orium-notif-${row.id}`,
-        url: '/',
-      };
-    case 'deadline_approaching':
-      return {
-        title: '⏰ Prazo próximo de entrega',
-        body: subject,
-        tag: `orium-notif-${row.id}`,
-        url: '/',
-      };
-    case 'deadline_overdue':
-      return {
-        title: '🚨 Prazo vencido — atenção imediata',
-        body: subject,
-        tag: `orium-notif-${row.id}`,
-        url: '/',
-      };
-    default:
-      return {
-        title: '🔔 Orium — Nova atualização',
-        body: subject,
-        tag: `orium-notif-${row.id}`,
-        url: '/',
-      };
-  }
+  // Mesmo formato das rotas do frontend (apps/web/src/router.ts).
+  const demandUrl = `/demandas/${encodeURIComponent(row.demand_id)}`;
+  return {
+    title: pushTitles[row.kind] ?? '🔔 Orium — Nova atualização',
+    body: subject,
+    tag: `orium-notif-${row.id}`,
+    url: row.task_id ? `${demandUrl}/tarefas/${encodeURIComponent(row.task_id)}` : demandUrl,
+  };
 }
 
 /**
@@ -375,10 +318,13 @@ export async function dispatchPendingNotificationsPush(database: Database): Prom
       id: string;
       recipient_user_id: string;
       kind: string;
+      demand_id: string;
+      task_id: string | null;
       demand_title: string;
       task_title: string | null;
     }>(
-      `SELECT n.id, n.recipient_user_id, n.kind, d.title AS demand_title, t.title AS task_title
+      `SELECT n.id, n.recipient_user_id, n.kind, n.demand_id, n.task_id,
+              d.title AS demand_title, t.title AS task_title
        FROM public.notification n
        JOIN public.demand d ON d.id = n.demand_id
        LEFT JOIN public.task t ON t.id = n.task_id

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DashboardItem, DashboardResponse, SessionResponse } from '@orium/contracts';
 import { api, ApiError } from '../api.js';
+import { formatCalendarDate, relativeDeadline } from '../dates.js';
 import type { DashboardSectionKey } from '../types.js';
 
 interface DashboardViewProps {
@@ -28,11 +29,12 @@ const priorityLabels: Record<string, string> = {
   urgent: 'Urgente',
 };
 
-function formatDate(calendar: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(calendar);
-  if (!m) return calendar;
-  return `${m[3]}/${m[2]}/${m[1]}`;
-}
+const formatDate = formatCalendarDate;
+
+const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/** Atualização automática silenciosa enquanto a aba está visível. */
+const AUTO_REFRESH_MS = 120_000;
 
 function formatDateTime(iso: string): string {
   const date = new Date(iso);
@@ -290,6 +292,21 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
     };
   }, [load]);
 
+  // Mantém o Painel atual sem clique: a cada 2 min com a aba visível e ao voltar para ela.
+  useEffect(() => {
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible' && hasDataRef.current && !requestRef.current) {
+        void load(true);
+      }
+    };
+    const interval = window.setInterval(refreshIfVisible, AUTO_REFRESH_MS);
+    document.addEventListener('visibilitychange', refreshIfVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', refreshIfVisible);
+    };
+  }, [load]);
+
   const handleOpen = (item: DashboardItem) => {
     if (item.kind === 'task') {
       onOpenItem({ demandId: item.demandId, taskId: item.taskId ?? item.id });
@@ -324,7 +341,13 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
         <div className="dashboard-item-meta">
           {item.demandTitle && <span className="muted-dash">Chamado: <strong>{item.demandTitle}</strong></span>}
           <span>Cliente: <strong>{item.client.name}</strong></span>
-          <span>Entrega: <strong>{formatDate(item.deliveryDate)}</strong></span>
+          <span>
+            Entrega: <strong>{formatDate(item.deliveryDate)}</strong>
+            {(() => {
+              const rel = data && item.status !== 'completed' ? relativeDeadline(item.deliveryDate, data.today) : null;
+              return rel ? <span className={`deadline-chip ${rel.tone}`}>{rel.label}</span> : null;
+            })()}
+          </span>
           {item.status && <span className={`status-badge ${item.status === 'completed' ? 'complete' : 'open'}`}>{statusLabelFor(item)}</span>}
           {item.kind === 'task' && item.assignedTo ? (
             <span>Responsável: <strong>{item.assignedTo.name}</strong></span>
@@ -742,6 +765,17 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
                       {colItems.map((item) => {
                         const isOverdue = overdueSet.has(item.id) || item.deliveryDate < data.today;
                         const isDueToday = dueTodaySet.has(item.id) || item.deliveryDate === data.today;
+                        const rel = relativeDeadline(item.deliveryDate, data.today);
+                        const isSoon = !isOverdue && !isDueToday && rel?.tone === 'soon';
+                        const dateText = isOverdue
+                          ? rel?.tone === 'overdue'
+                            ? capitalize(rel.label)
+                            : `Atrasada · ${formatDate(item.deliveryDate)}`
+                          : isDueToday
+                            ? 'Hoje'
+                            : isSoon && rel
+                              ? capitalize(rel.label)
+                              : formatDate(item.deliveryDate);
 
                         return (
                           <li
@@ -827,15 +861,16 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
 
                                 <span
                                   className={`kanban-card-date-badge ${
-                                    isOverdue ? 'date-overdue' : isDueToday ? 'date-today' : ''
+                                    isOverdue ? 'date-overdue' : isDueToday ? 'date-today' : isSoon ? 'date-soon' : ''
                                   }`}
+                                  title={`Entrega: ${formatDate(item.deliveryDate)}`}
                                 >
                                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                     <circle cx="12" cy="12" r="10" />
                                     <polyline points="12 6 12 12 16 14" />
                                   </svg>
                                   <span>
-                                    {isOverdue ? `Atrasada · ${formatDate(item.deliveryDate)}` : isDueToday ? 'Hoje' : formatDate(item.deliveryDate)}
+                                    {dateText}
                                   </span>
                                 </span>
                               </div>

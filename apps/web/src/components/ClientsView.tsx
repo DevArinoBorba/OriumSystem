@@ -113,6 +113,16 @@ export function ClientsView({ session, onUnauthorized, onOpenMaterials }: Client
     };
   }, [page, status, appliedSearch, loadClients]);
 
+  // Busca enquanto digita (com atraso curto); Enter continua aplicando na hora.
+  useEffect(() => {
+    if (searchQuery === appliedSearch) return;
+    const timer = window.setTimeout(() => {
+      setPage(1);
+      setAppliedSearch(searchQuery);
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery, appliedSearch]);
+
   // Focus on name input when form opens
   useEffect(() => {
     if (formOpen) {

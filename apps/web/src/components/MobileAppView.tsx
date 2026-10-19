@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Demand, SessionResponse, Task, TaskComment } from '@orium/contracts';
 import { api, ApiError } from '../api.js';
+import { todayInAgency } from '../dates.js';
 import { ensurePushSubscription, triggerServerTestPush } from '../pushClient.js';
 
 interface MobileAppViewProps {
@@ -161,7 +162,7 @@ export function MobileAppView({
   }, [loadData]);
 
   const kpis = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayInAgency();
     let inProduction = 0;
     let ready = 0;
     let inReview = 0;

@@ -38,6 +38,8 @@ self.addEventListener('notificationclick', (event) => {
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
       for (const client of windowClients) {
         if ('focus' in client) {
+          // App já aberto: navega internamente para o chamado/tarefa da notificação.
+          client.postMessage({ type: 'orium:navigate', url: targetUrl });
           return client.focus();
         }
       }

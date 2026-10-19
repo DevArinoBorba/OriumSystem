@@ -4183,6 +4183,37 @@ dialog.native-dialog::backdrop {
   font-weight: 700;
 }
 
+.kanban-card-date-badge.date-soon {
+  color: var(--color-warning-text);
+  font-weight: 600;
+}
+
+/* Prazo relativo ("vence hoje", "em 3 dias") ao lado da data de entrega */
+.deadline-chip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: var(--color-surface-hover, rgba(127, 127, 127, 0.12));
+}
+
+.deadline-chip.overdue {
+  color: var(--color-danger-text);
+  background: var(--color-danger-bg);
+}
+
+.deadline-chip.today {
+  color: var(--color-warning-text);
+  background: var(--color-warning-bg);
+}
+
+.deadline-chip.soon {
+  color: var(--color-warning-text);
+}
+
 .kanban-card-assignee {
   display: inline-flex;
   align-items: center;
