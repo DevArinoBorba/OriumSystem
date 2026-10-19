@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
-  createDemandSchema,
-  createTaskSchema,
   updateDemandSchema,
   type Client,
   type Demand,
@@ -13,14 +11,16 @@ import {
 import { api, ApiError } from '../api.js';
 import { showToast } from './Toasts.js';
 import { DeadlineDate } from './DeadlineDate.js';
+import { CreateDemandModal } from './CreateDemandModal.js';
+import { CreateTaskForm } from './CreateTaskForm.js';
 import { TaskDetailView } from './TaskDetailView.js';
+import { taskStatusLabel } from '../taskStatus.js';
 import { UseTemplateModal } from './UseTemplateModal.js';
 import { ManageTemplatesModal } from './ManageTemplatesModal.js';
 import type {
   DemandFormState,
   DemandPriorityFilter,
   DemandsStatusFilter,
-  TaskFormState,
   UserListItem,
 } from '../types.js';
 
@@ -41,16 +41,6 @@ const emptyDemandForm = (): DemandFormState => ({
   description: '',
   priority: 'normal',
   deliveryDate: '',
-});
-
-const emptyTaskForm = (): TaskFormState => ({
-  assignedToUserId: '',
-  title: '',
-  description: '',
-  priority: 'normal',
-  deliveryDate: '',
-  requirements: [{ title: '', mandatory: false }],
-  dependsOnTaskIds: [],
 });
 
 const priorityLabels: Record<DemandPriorityFilter, string> = {
@@ -107,11 +97,6 @@ export function DemandsView({
 
   // ---------------- Create demand form ----------------
   const [demandFormOpen, setDemandFormOpen] = useState(false);
-  const [demandForm, setDemandForm] = useState<DemandFormState>(emptyDemandForm);
-  const [demandFormBusy, setDemandFormBusy] = useState(false);
-  const [demandFormError, setDemandFormError] = useState<string | null>(null);
-  const demandFormSubmittingRef = useRef(false);
-  const demandTitleInputRef = useRef<HTMLInputElement>(null);
 
   // ---------------- Edit demand form ----------------
   const [editOpen, setEditOpen] = useState(false);
@@ -132,12 +117,6 @@ export function DemandsView({
 
   // ---------------- Create task form ----------------
   const [taskFormOpen, setTaskFormOpen] = useState(false);
-  const [taskForm, setTaskForm] = useState<TaskFormState>(emptyTaskForm);
-  const [taskFormBusy, setTaskFormBusy] = useState(false);
-  const [taskFormError, setTaskFormError] = useState<string | null>(null);
-  const taskFormSubmittingRef = useRef(false);
-  const assigneeInputRef = useRef<HTMLSelectElement>(null);
-  const taskTitleInputRef = useRef<HTMLInputElement>(null);
 
   // ---------------- Selected task detail (renders TaskDetailView) ----------------
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -393,82 +372,19 @@ export function DemandsView({
 
   // ============ Create demand ============
   function openCreateDemand() {
-    if (demandFormBusy) return;
-    setDemandForm(emptyDemandForm());
-    setDemandFormError(null);
     setDemandFormOpen(true);
     if (!clientsLoaded && hasDemandsWrite) {
       void loadClientsList();
     }
   }
 
-  useEffect(() => {
-    if (!demandFormOpen) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !demandFormBusy) {
-        setDemandFormOpen(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [demandFormOpen, demandFormBusy]);
+  const closeCreateDemand = useCallback(() => setDemandFormOpen(false), []);
 
-  async function handleCreateDemand(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (demandFormSubmittingRef.current) return;
-    demandFormSubmittingRef.current = true;
-    setDemandFormBusy(true);
-    setDemandFormError(null);
-
-    const payload = {
-      clientId: demandForm.clientId,
-      title: demandForm.title.trim(),
-      description: demandForm.description.trim(),
-      priority: demandForm.priority,
-      deliveryDate: demandForm.deliveryDate,
-    };
-    const validation = createDemandSchema.safeParse(payload);
-    if (!validation.success) {
-      const firstIssue = validation.error.issues[0];
-      const fieldName = firstIssue?.path[0] as string | undefined;
-      if (fieldName === 'clientId') {
-        setDemandFormError('Selecione o cliente do chamado.');
-      } else if (fieldName === 'title') {
-        demandTitleInputRef.current?.focus();
-        setDemandFormError('O título do chamado é obrigatório (1 a 160 caracteres).');
-      } else if (fieldName === 'description') {
-        setDemandFormError('A descrição não pode exceder 5000 caracteres.');
-      } else if (fieldName === 'deliveryDate') {
-        setDemandFormError('Informe a data de entrega geral do chamado.');
-      } else {
-        setDemandFormError(firstIssue?.message || 'Verifique os dados preenchidos.');
-      }
-      demandFormSubmittingRef.current = false;
-      setDemandFormBusy(false);
-      return;
-    }
-
-    const controller = new AbortController();
-    try {
-      const response = await api.createDemand(validation.data, controller.signal, onUnauthorized);
-      const created = response.demand;
-      setDemandFormOpen(false);
-      showToast(`${created.title} criado com sucesso.`);
-      setSelectedDemandId(created.id);
-      void loadDemandDetail(created.id);
-      void loadDemands(page, status, priority, appliedSearch);
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 403) {
-        setDemandFormError('Você não tem permissão para criar demandas.');
-      } else if (error instanceof ApiError && error.status === 404) {
-        setDemandFormError('O cliente selecionado não está ativo ou não foi encontrado.');
-      } else {
-        setDemandFormError('Não foi possível criar a demanda. Verifique os dados e tente novamente.');
-      }
-    } finally {
-      demandFormSubmittingRef.current = false;
-      setDemandFormBusy(false);
-    }
+  function handleDemandCreated(created: Demand) {
+    setDemandFormOpen(false);
+    setSelectedDemandId(created.id);
+    void loadDemandDetail(created.id);
+    void loadDemands(page, status, priority, appliedSearch);
   }
 
   function handleDemandCreatedFromTemplate(createdDemandId: string, createdTitle: string) {
@@ -649,120 +565,16 @@ export function DemandsView({
 
   // ============ Create task ============
   function openCreateTask() {
-    if (taskFormBusy) return;
-    const form = emptyTaskForm();
-    if (demand) {
-      form.deliveryDate = demand.deliveryDate;
-    }
-    setTaskForm(form);
-    setTaskFormError(null);
     setTaskFormOpen(true);
   }
 
-  function setRequirement(index: number, patch: Partial<{ title: string; mandatory: boolean }>) {
-    setTaskForm((prev) => {
-      const next = [...prev.requirements];
-      const current = next[index] ?? { title: '', mandatory: false };
-      next[index] = { ...current, ...patch };
-      return { ...prev, requirements: next };
-    });
-  }
+  const closeCreateTask = useCallback(() => setTaskFormOpen(false), []);
 
-  function addRequirement() {
-    setTaskForm((prev) => ({
-      ...prev,
-      requirements: [...prev.requirements, { title: '', mandatory: false }],
-    }));
-  }
-
-  function removeRequirement(index: number) {
-    setTaskForm((prev) => ({
-      ...prev,
-      requirements: prev.requirements.filter((_, i) => i !== index),
-    }));
-  }
-
-  function toggleDependency(taskId: string) {
-    setTaskForm((prev) => {
-      const has = prev.dependsOnTaskIds.includes(taskId);
-      return {
-        ...prev,
-        dependsOnTaskIds: has
-          ? prev.dependsOnTaskIds.filter((id) => id !== taskId)
-          : [...prev.dependsOnTaskIds, taskId],
-      };
-    });
-  }
-
-  async function handleCreateTask(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!demand || taskFormSubmittingRef.current) return;
-    taskFormSubmittingRef.current = true;
-    setTaskFormBusy(true);
-    setTaskFormError(null);
-
-    const payload = {
-      demandId: demand.id,
-      assignedToUserId: taskForm.assignedToUserId,
-      title: taskForm.title.trim(),
-      description: taskForm.description.trim(),
-      priority: taskForm.priority,
-      deliveryDate: taskForm.deliveryDate.trim() || undefined,
-      requirements: taskForm.requirements
-        .filter((r) => r.title.trim().length > 0)
-        .map((r) => ({ title: r.title.trim(), mandatory: r.mandatory })),
-      dependsOnTaskIds: taskForm.dependsOnTaskIds,
-    };
-
-    const validation = createTaskSchema.safeParse(payload);
-    if (!validation.success) {
-      const firstIssue = validation.error.issues[0];
-      const fieldName = firstIssue?.path[0] as string | undefined;
-      let errorMessage = firstIssue?.message || 'Verifique os dados preenchidos.';
-      if (fieldName === 'assignedToUserId') {
-        errorMessage = 'Selecione o responsável pela tarefa.';
-        assigneeInputRef.current?.focus();
-      } else if (fieldName === 'title') {
-        errorMessage = 'O título da tarefa é obrigatório (1 a 160 caracteres).';
-        taskTitleInputRef.current?.focus();
-      } else if (fieldName === 'deliveryDate') {
-        errorMessage = 'A data de entrega da tarefa informada é inválida.';
-      } else if (fieldName === 'requirements') {
-        errorMessage = 'Revise os requisitos: cada um precisa de um título de 1 a 160 caracteres (máximo 30).';
-      } else if (fieldName === 'dependsOnTaskIds') {
-        errorMessage = 'Revise as dependências selecionadas (máximo 30).';
-      }
-      setTaskFormError(errorMessage);
-      taskFormSubmittingRef.current = false;
-      setTaskFormBusy(false);
-      return;
-    }
-
-    const controller = new AbortController();
-    try {
-      const response = await api.createTask(validation.data, controller.signal, onUnauthorized);
-      const created = response.task;
-      setTaskFormOpen(false);
-      showToast(`Tarefa "${created.title}" criada com sucesso.`);
-      setSelectedTaskId(null);
-      if (selectedDemandId) {
-        void loadDemandDetail(selectedDemandId);
-      }
-    } catch (error) {
-      if (error instanceof ApiError && error.code === 'TASK_DEPENDENCY_CYCLE') {
-        setTaskFormError('As dependências escolhidas criariam um ciclo. Escolha uma combinação diferente.');
-      } else if (error instanceof ApiError && error.status === 403) {
-        setTaskFormError('Você não tem permissão para criar tarefas nesta demanda.');
-      } else if (error instanceof ApiError && error.status === 404) {
-        setTaskFormError('A demanda ou algum responsável selecionado não está mais disponível.');
-      } else if (error instanceof ApiError && error.status === 409) {
-        setTaskFormError('Esta demanda foi alterada por outro processo. Recarregue os detalhes e tente novamente.');
-      } else {
-        setTaskFormError('Não foi possível criar a tarefa. Verifique os dados e tente novamente.');
-      }
-    } finally {
-      taskFormSubmittingRef.current = false;
-      setTaskFormBusy(false);
+  function handleTaskCreated() {
+    setTaskFormOpen(false);
+    setSelectedTaskId(null);
+    if (selectedDemandId) {
+      void loadDemandDetail(selectedDemandId);
     }
   }
 
@@ -784,19 +596,6 @@ export function DemandsView({
 
   function demandStatusLabel(d: Demand): string {
     return d.status === 'completed' ? 'Concluída' : 'Em aberto';
-  }
-
-  function taskStatusLabel(status: Task['status']): string {
-    const labels: Record<Task['status'], string> = {
-      blocked: 'Aguardando',
-      ready: 'Pronta',
-      in_production: 'Em produção',
-      in_review: 'Em revisão',
-      changes_requested: 'Ajustes pedidos',
-      paused: 'Pausada',
-      completed: 'Concluída',
-    };
-    return labels[status];
   }
 
   const allTasksCompleted = tasks.length > 0 && tasks.every((t) => t.status === 'completed');
@@ -1055,130 +854,13 @@ export function DemandsView({
 
         {/* Create demand modal pop-up (admin) */}
         {isAdmin && demandFormOpen && (
-          <div
-            className="modal-backdrop"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="demand-form-heading"
-            onMouseDown={(event) => {
-              if (event.target === event.currentTarget && !demandFormBusy) {
-                setDemandFormOpen(false);
-              }
-            }}
-          >
-            <div className="modal-card">
-              <div className="modal-header">
-                <h2 id="demand-form-heading">Novo chamado</h2>
-                <button
-                  type="button"
-                  className="close-button"
-                  onClick={() => setDemandFormOpen(false)}
-                  aria-label="Fechar formulário"
-                  disabled={demandFormBusy}
-                >
-                  ✕
-                </button>
-              </div>
-
-              <form onSubmit={(event) => void handleCreateDemand(event)} noValidate className="modal-body" style={{ marginBottom: 0 }}>
-                {demandFormError && (
-                  <div className="alert-banner error" role="alert">
-                    <span>{demandFormError}</span>
-                  </div>
-                )}
-
-                <div className="form-field">
-                  <label htmlFor="demand-form-client">Cliente *</label>
-                  <select
-                    id="demand-form-client"
-                    value={demandForm.clientId}
-                    onChange={(event) => setDemandForm({ ...demandForm, clientId: event.target.value })}
-                    disabled={demandFormBusy}
-                    required
-                  >
-                    <option value="" disabled>
-                      {clientsLoaded ? 'Selecione o cliente…' : 'Carregando clientes…'}
-                    </option>
-                    {clients.map((client) => (
-                      <option key={client.id} value={client.id}>
-                        {client.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-field">
-                  <label htmlFor="demand-form-title">Título do chamado *</label>
-                  <input
-                    ref={demandTitleInputRef}
-                    id="demand-form-title"
-                    type="text"
-                    placeholder="Ex.: Campanha de lançamento ou Nova Landing Page"
-                    maxLength={160}
-                    value={demandForm.title}
-                    onChange={(event) => setDemandForm({ ...demandForm, title: event.target.value })}
-                    required
-                    disabled={demandFormBusy}
-                  />
-                </div>
-
-                <div className="form-field">
-                  <label htmlFor="demand-form-description">Descrição</label>
-                  <textarea
-                    id="demand-form-description"
-                    rows={4}
-                    placeholder="Contexto, referências e orientações gerais do entregável…"
-                    maxLength={5000}
-                    value={demandForm.description}
-                    onChange={(event) => setDemandForm({ ...demandForm, description: event.target.value })}
-                    disabled={demandFormBusy}
-                  />
-                </div>
-
-                <div className="form-row">
-                  <div className="form-field">
-                    <label htmlFor="demand-form-priority">Prioridade</label>
-                    <select
-                      id="demand-form-priority"
-                      value={demandForm.priority}
-                      onChange={(event) =>
-                        setDemandForm({ ...demandForm, priority: event.target.value as DemandFormState['priority'] })
-                      }
-                      disabled={demandFormBusy}
-                    >
-                      <option value="low">Baixa</option>
-                      <option value="normal">Normal</option>
-                      <option value="high">Alta</option>
-                      <option value="urgent">Urgente</option>
-                    </select>
-                  </div>
-                  <div className="form-field">
-                    <label htmlFor="demand-form-date" className="fieldset-label">
-                      Data de entrega geral do chamado *
-                    </label>
-                    <input
-                      id="demand-form-date"
-                      type="date"
-                      value={demandForm.deliveryDate}
-                      onChange={(event) => setDemandForm({ ...demandForm, deliveryDate: event.target.value })}
-                      required
-                      disabled={demandFormBusy}
-                    />
-                    <span className="muted-text">Defina o prazo acordado com o cliente.</span>
-                  </div>
-                </div>
-
-                <div className="modal-actions">
-                  <button type="button" className="secondary-button" onClick={() => setDemandFormOpen(false)} disabled={demandFormBusy}>
-                    Cancelar
-                  </button>
-                  <button type="submit" className="primary-button" disabled={demandFormBusy}>
-                    {demandFormBusy ? 'Criando…' : 'Abrir chamado'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
+          <CreateDemandModal
+            clients={clients}
+            clientsLoaded={clientsLoaded}
+            onClose={closeCreateDemand}
+            onCreated={handleDemandCreated}
+            onUnauthorized={onUnauthorized}
+          />
         )}
 
         {/* Modals for templates */}
@@ -1422,203 +1104,16 @@ export function DemandsView({
 
               {/* Create task inline form (admin) */}
               {isAdmin && taskFormOpen && demand && (
-                <section className="inline-panel" aria-labelledby="task-form-heading">
-                  <div className="panel-header">
-                    <h2 id="task-form-heading">Nova tarefa</h2>
-                    <button
-                      type="button"
-                      className="close-button"
-                      onClick={() => setTaskFormOpen(false)}
-                      aria-label="Fechar formulário"
-                      disabled={taskFormBusy}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  <form onSubmit={(event) => void handleCreateTask(event)} noValidate>
-                    {taskFormError && (
-                      <div className="alert-banner error" role="alert">
-                        <span>{taskFormError}</span>
-                      </div>
-                    )}
-
-                    <div className="form-field">
-                      <label htmlFor="task-form-assignee">Responsável *</label>
-                      <select
-                        ref={assigneeInputRef}
-                        id="task-form-assignee"
-                        value={taskForm.assignedToUserId}
-                        onChange={(event) => setTaskForm({ ...taskForm, assignedToUserId: event.target.value })}
-                        required
-                        disabled={taskFormBusy}
-                      >
-                        <option value="" disabled>
-                          {usersLoaded ? 'Selecione o responsável…' : 'Carregando equipe…'}
-                        </option>
-                        {users
-                          .filter((u) => u.active)
-                          .map((u) => (
-                            <option key={u.id} value={u.id}>
-                              {u.name} {u.id === session.user.id ? '(você)' : ''}
-                            </option>
-                          ))}
-                      </select>
-                    </div>
-
-                    <div className="form-field">
-                      <label htmlFor="task-form-title">Título da tarefa *</label>
-                      <input
-                        ref={taskTitleInputRef}
-                        id="task-form-title"
-                        type="text"
-                        maxLength={160}
-                        value={taskForm.title}
-                        onChange={(event) => setTaskForm({ ...taskForm, title: event.target.value })}
-                        required
-                        disabled={taskFormBusy}
-                      />
-                    </div>
-
-                    <div className="form-field">
-                      <label htmlFor="task-form-description">Descrição</label>
-                      <textarea
-                        id="task-form-description"
-                        rows={3}
-                        maxLength={5000}
-                        value={taskForm.description}
-                        onChange={(event) => setTaskForm({ ...taskForm, description: event.target.value })}
-                        disabled={taskFormBusy}
-                      />
-                    </div>
-
-                    <div className="form-row">
-                      <div className="form-field">
-                        <label htmlFor="task-form-priority">Prioridade</label>
-                        <select
-                          id="task-form-priority"
-                          value={taskForm.priority}
-                          onChange={(event) =>
-                            setTaskForm({ ...taskForm, priority: event.target.value as TaskFormState['priority'] })
-                          }
-                          disabled={taskFormBusy}
-                        >
-                          <option value="low">Baixa</option>
-                          <option value="normal">Normal</option>
-                          <option value="high">Alta</option>
-                          <option value="urgent">Urgente</option>
-                        </select>
-                      </div>
-                      <div className="form-field">
-                        <label htmlFor="task-form-date" className="fieldset-label">
-                          Data de entrega da tarefa *
-                        </label>
-                        <input
-                          id="task-form-date"
-                          type="date"
-                          value={taskForm.deliveryDate}
-                          onChange={(event) => setTaskForm({ ...taskForm, deliveryDate: event.target.value })}
-                          disabled={taskFormBusy}
-                        />
-                        <span className="muted-text">
-                          Prazo individual da tarefa; fica preenchida com a data geral do chamado e pode ser ajustada.
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Requirements */}
-                    <fieldset className="fieldset-block">
-                      <legend className="fieldset-legend">Requisitos</legend>
-                      <p className="muted-text" style={{ fontSize: '0.85rem', marginTop: 0 }}>
-                        Requisitos verificáveis para concluir a tarefa (opcional). Marque como obrigatório quando o item for condição de entrega.
-                      </p>
-                      {taskForm.requirements.length === 0 && (
-                        <p className="muted-text" style={{ fontSize: '0.875rem' }}>
-                          Nenhum requisito adicionado.
-                        </p>
-                      )}
-                      {taskForm.requirements.map((requirement, index) => (
-                        <div className="requirement-row" key={index}>
-                          <input
-                            className="requirement-input"
-                            type="text"
-                            maxLength={160}
-                            placeholder={`Requisito ${index + 1}`}
-                            aria-label={`Título do requisito ${index + 1}`}
-                            value={requirement.title}
-                            onChange={(event) => setRequirement(index, { title: event.target.value })}
-                            disabled={taskFormBusy || taskForm.requirements.length >= 30}
-                          />
-                          <label className="checkbox-label-wrapper">
-                            <input
-                              type="checkbox"
-                              checked={requirement.mandatory}
-                              onChange={(event) => setRequirement(index, { mandatory: event.target.checked })}
-                              disabled={taskFormBusy}
-                            />
-                            <span>Obrigatório</span>
-                          </label>
-                          <button
-                            type="button"
-                            className="text-button"
-                            onClick={() => removeRequirement(index)}
-                            disabled={taskFormBusy}
-                            aria-label={`Remover requisito ${index + 1}`}
-                          >
-                            Remover
-                          </button>
-                        </div>
-                      ))}
-                      {taskForm.requirements.length > 0 && (
-                        <div className="requirement-draft" aria-live="polite">
-                          {taskForm.requirements.filter((r) => r.title.trim().length > 0).length} requisito(s) preenchido(s).
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        className="secondary-button small"
-                        onClick={addRequirement}
-                        disabled={taskFormBusy || taskForm.requirements.length >= 30}
-                      >
-                        + Adicionar requisito
-                      </button>
-                    </fieldset>
-
-                    {/* Dependencies */}
-                    {tasks.length > 0 && (
-                      <fieldset className="fieldset-block">
-                        <legend className="fieldset-legend">Dependências da tarefa</legend>
-                        <p className="muted-text" style={{ fontSize: '0.85rem', marginTop: 0 }}>
-                          Selecione tarefas deste mesmo chamado que precisam estar concluídas antes desta começar.
-                        </p>
-                        <div className="dependency-list">
-                          {tasks.map((existing) => (
-                            <label className="checkbox-label-wrapper" key={existing.id}>
-                              <input
-                                type="checkbox"
-                                checked={taskForm.dependsOnTaskIds.includes(existing.id)}
-                                onChange={() => toggleDependency(existing.id)}
-                                disabled={taskFormBusy}
-                              />
-                              <span>
-                                {existing.title} —{' '}
-                                <span className={`task-badge status-${existing.status}`}>{taskStatusLabel(existing.status)}</span>
-                              </span>
-                            </label>
-                          ))}
-                        </div>
-                      </fieldset>
-                    )}
-
-                    <div className="panel-actions">
-                      <button type="button" className="secondary-button" onClick={() => setTaskFormOpen(false)} disabled={taskFormBusy}>
-                        Cancelar
-                      </button>
-                      <button type="submit" className="primary-button" disabled={taskFormBusy}>
-                        {taskFormBusy ? 'Criando…' : 'Criar tarefa'}
-                      </button>
-                    </div>
-                  </form>
-                </section>
+                <CreateTaskForm
+                  currentUserId={session.user.id}
+                  demand={demand}
+                  tasks={tasks}
+                  users={users}
+                  usersLoaded={usersLoaded}
+                  onClose={closeCreateTask}
+                  onCreated={handleTaskCreated}
+                  onUnauthorized={onUnauthorized}
+                />
               )}
 
               {/* History */}
