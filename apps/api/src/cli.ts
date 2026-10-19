@@ -6,6 +6,7 @@ import { connectDatabase, assertApplicationDatabase } from './db.js';
 import { migrateDatabase } from './migrate.js';
 import { IDENTITY_LOCK } from './identity.js';
 import { recoverUserAccess } from './recovery.js';
+import { runAgentCommand } from './agent.js';
 
 async function hiddenPassword(label: string): Promise<string> {
   if (!process.stdin.isTTY) throw new Error('Terminal interativo obrigatório.');
@@ -158,6 +159,46 @@ async function recoverCLI() {
   }
 }
 
+async function readStdin(): Promise<string> {
+  if (process.stdin.isTTY) return '';
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+/** Orium Agent: `agent <comando>` com entrada JSON (argumento ou stdin) e saída JSON. Nunca lança. */
+async function agentCLI() {
+  const command = process.argv[3] ?? '';
+  let input: Record<string, unknown> = {};
+  try {
+    const raw = process.argv[4] ?? (await readStdin());
+    input = raw.trim() ? (JSON.parse(raw) as Record<string, unknown>) : {};
+    if (typeof input !== 'object' || input === null || Array.isArray(input)) throw new Error('not an object');
+  } catch {
+    console.log(JSON.stringify({ ok: false, code: 'INVALID_JSON', message: 'A entrada precisa ser um objeto JSON.' }));
+    process.exitCode = 2;
+    return;
+  }
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    console.log(JSON.stringify({ ok: false, code: 'CONFIG', message: 'DATABASE_URL ausente no ambiente do agente.' }));
+    process.exitCode = 1;
+    return;
+  }
+  const database = connectDatabase(url);
+  try {
+    await assertApplicationDatabase(database);
+    const result = await runAgentCommand(database, command, input);
+    console.log(JSON.stringify(result, null, 2));
+    process.exitCode = result.ok ? 0 : (result as { needsClarification?: boolean }).needsClarification ? 2 : 1;
+  } catch {
+    console.log(JSON.stringify({ ok: false, code: 'INTERNAL_ERROR', message: 'Falha ao conectar no banco com a identidade da aplicação.' }));
+    process.exitCode = 1;
+  } finally {
+    await database.pool.end();
+  }
+}
+
 async function main() {
   if (process.argv[2] === 'migrate') {
     if (!process.env.MIGRATION_DATABASE_URL) throw new Error('MIGRATION_DATABASE_URL necessária.');
@@ -165,6 +206,7 @@ async function main() {
     console.log('Migrations aplicadas.');
   } else if (process.argv[2] === 'bootstrap') await bootstrap();
   else if (process.argv[2] === 'recover') await recoverCLI();
+  else if (process.argv[2] === 'agent') await agentCLI();
   else throw new Error('Comando desconhecido.');
 }
 const KNOWN_SAFE_MESSAGES = new Set([

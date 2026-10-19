@@ -1,0 +1,17 @@
+#!/bin/sh
+# Orium Agent -> Orium System, com as mesmas regras, permissões e notificações da API.
+# Uso:   orium-agent <comando> <<'JSON'
+#        { "actor": "email@do.usuario", ... }
+#        JSON
+# Saída: JSON. Código 0 = feito; 2 = falta informação/ambíguo (pergunte ao usuário); 1 = erro.
+# Comandos: today, whoami, find-client, find-demand, find-task, find-user, get-demand, get-task,
+#   list-templates, create-client, create-demand, create-task, instantiate-template, accept-task,
+#   start-task, submit-review, review-task, request-pause, approve-pause, resume-task,
+#   comment-task, add-material
+set -eu
+CONTAINER="${ORIUM_API_CONTAINER:-orium-production-api-1}"
+if [ "$#" -lt 1 ]; then
+  echo '{"ok":false,"code":"USAGE","message":"Uso: orium-agent <comando> com JSON no stdin."}'
+  exit 2
+fi
+exec docker exec -i "$CONTAINER" node dist/cli.js agent "$1"

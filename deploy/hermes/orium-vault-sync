@@ -1,0 +1,162 @@
+#!/usr/bin/env python3
+import json, os, re, subprocess
+from datetime import datetime
+from pathlib import Path
+
+VAULT = Path("/data/orium/obsidian-vault")
+CLIENTS_DIR = VAULT / "Clientes"
+DEMANDS_DIR = VAULT / "Demandas"
+SOP_DIR = VAULT / "Processos-SOP"
+CLIENTS_DIR.mkdir(parents=True, exist_ok=True)
+DEMANDS_DIR.mkdir(parents=True, exist_ok=True)
+SOP_DIR.mkdir(parents=True, exist_ok=True)
+
+def slugify_title(name: str) -> str:
+    return re.sub(r'[\\/*?:"<>|]', "-", name.strip())
+
+def run_query(mode: str):
+    out = subprocess.check_output(["/usr/local/bin/orium-hermes-query", mode], text=True)
+    return json.loads(out)
+
+clients_data = run_query("clients").get("clients", [])
+demands_data = run_query("demands").get("demands", [])
+overview_data = run_query("overview").get("stats", {})
+
+client_links = []
+for c in clients_data:
+    name = c.get("name") or "Cliente"
+    safe_name = slugify_title(name)
+    client_links.append(f"- [[Clientes/{safe_name}|{name}]] — Status: `{c.get('status', 'active')}`")
+    note_path = CLIENTS_DIR / f"{safe_name}.md"
+    
+    # Preserve custom manual/agent observations if file already exists
+    custom_notes = ""
+    if note_path.exists():
+        existing = note_path.read_text(encoding="utf-8")
+        marker = "## Histórico e Observações (Orium Agent)"
+        if marker in existing:
+            custom_notes = existing.split(marker, 1)[1].strip()
+
+    scope_lines = []
+    for s in (c.get("scope_items") or []):
+        if isinstance(s, dict) and s.get("name"):
+            scope_lines.append(f"- **{s.get('name')}** ({s.get('category', 'Geral')}) — qtd: {s.get('quantity', 1)}")
+    if not scope_lines:
+        scope_lines = ["- *(Sem itens de escopo detalhados)*"]
+
+    team_lines = []
+    for m in (c.get("team") or []):
+        if isinstance(m, dict) and m.get("name"):
+            team_lines.append(f"- **{m.get('name')}** ({m.get('role', 'Equipe')})")
+    if not team_lines:
+        team_lines = ["- *(Equipe padrão Orium)*"]
+
+    c_demands = [d for d in demands_data if d.get("client_name") == name]
+    demand_lines = []
+    for d in c_demands:
+        demand_lines.append(f"- **{d.get('title')}** — Status: `{d.get('status')}` | Prioridade: `{d.get('priority')}` | Prazo: `{d.get('due_date') or 'Sem prazo'}`")
+    if not demand_lines:
+        demand_lines = ["- *(Nenhuma demanda aberta no momento)*"]
+
+    md = f"""---
+title: "{name}"
+type: cliente
+status: "{c.get('status', 'active')}"
+segment: "{c.get('segment') or 'Agência'}"
+updated_at: "{datetime.now().strftime('%Y-%m-%d %H:%M')}"
+tags: [cliente, orium, {re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')}]
+---
+
+# {name}
+
+- **Status:** `{c.get('status', 'active')}`
+- **Segmento:** {c.get('segment') or 'Não informado'}
+- **Contato Principal:** {c.get('contact_name') or 'Não informado'} ({c.get('contact_phone') or 'Sem telefone'} / {c.get('contact_email') or 'Sem e-mail'})
+- **Observações Cadastrais:** {c.get('notes') or 'Nenhuma'}
+
+## Escopo Contratado
+{chr(10).join(scope_lines)}
+
+## Equipe Responsável
+{chr(10).join(team_lines)}
+
+## Demandas Atuais
+{chr(10).join(demand_lines)}
+
+## Histórico e Observações (Orium Agent)
+{custom_notes if custom_notes else "- *(Espa?o para o Orium Agent registrar decis?es de reuni?es, alinhamentos de grupo no WhatsApp, tom de voz e prefer?ncias deste cliente)*"}
+"""
+    note_path.write_text(md, encoding="utf-8")
+
+# Create SOP note
+sop_path = SOP_DIR / "Padrao-Atendimento-Orium.md"
+if not sop_path.exists():
+    sop_path.write_text("""---
+title: "Padrão de Atendimento e Operação — Orium Digital"
+type: sop
+tags: [sop, operacao, orium]
+---
+
+# Padrão de Atendimento — Orium Digital
+
+1. **Identidade Oficial:** O agente se apresenta exclusivamente como **Orium Agent**, assistente executivo da ag?ncia **Orium Digital** (**Orium System**).
+2. **Grupos de WhatsApp de Clientes:**
+   - O **Orium Agent** permanece em modo de observa??o silenciosa nos grupos.
+   - S? responde no grupo quando mencionado diretamente (`@Orium Agent`) ou quando respondem a uma mensagem dele.
+   - Sempre que uma decis?o importante de campanha, verba, prazo ou briefing ocorrer no grupo, o **Orium Agent** pode salvar na mem?ria (`wiki_memory_write` ou na nota do cliente em `Clientes/<Nome>.md`).
+3. **Cofre de Credenciais:**
+   - Senhas e acessos de clientes s?o consultados em tempo real via `/usr/local/bin/orium-hermes-query credentials "<cliente>"`.
+""", encoding="utf-8")
+
+# Create INDEX.md
+index_md = f"""---
+title: "Orium Brain — Segundo Cérebro (Obsidian Vault)"
+type: index
+updated_at: "{datetime.now().strftime('%Y-%m-%d %H:%M')}"
+tags: [index, orium, second-brain]
+---
+
+# Orium Brain — Segundo Cérebro (Orium Digital)
+
+Bem-vindo ao Vault de conhecimento vivo do **Orium Agent** (`/data/orium/obsidian-vault`).
+
+## Resumo Operacional Sincronizado
+- **Clientes Ativos:** {overview_data.get('active_clients', 0)}
+- **Demandas Abertas:** {overview_data.get('open_demands', 0)}
+- **Tarefas Pendentes:** {overview_data.get('open_tasks', 0)}
+- **Tarefas Atrasadas:** {overview_data.get('overdue_tasks', 0)}
+
+## Clientes Ativos (`Clientes/`)
+{chr(10).join(client_links) if client_links else "- *(Nenhum cliente ativo)*"}
+
+## Processos e SOP (`Processos-SOP/`)
+- [[Processos-SOP/Padrao-Atendimento-Orium|Padrão de Atendimento e Operação — Orium Digital]]
+"""
+(VAULT / "INDEX.md").write_text(index_md, encoding="utf-8")
+print(f"Synced {len(clients_data)} clients and {len(demands_data)} demands into {VAULT}")
+
+# Auto-create Google Drive folder structure (Agent/<Cliente>/...) for any new active client in Orium System
+try:
+    state_file = VAULT / ".gdrive_synced_clients.json"
+    already_synced = set()
+    if state_file.exists():
+        try:
+            already_synced = set(json.loads(state_file.read_text(encoding="utf-8")))
+        except Exception:
+            already_synced = set()
+    active_names = [str(c.get("name") or "").strip() for c in clients_data if c.get("name")]
+    new_clients = [n for n in active_names if n not in already_synced]
+    if new_clients:
+        res = subprocess.run(
+            ["/usr/local/bin/orium-drive-upload", "--init-clients"] + new_clients,
+            capture_output=True, text=True, timeout=90
+        )
+        if res.returncode == 0:
+            already_synced.update(new_clients)
+            state_file.write_text(json.dumps(sorted(already_synced), ensure_ascii=False, indent=2), encoding="utf-8")
+            print(f"Created Google Drive folders for new clients: {new_clients}")
+    # Clean temporary WhatsApp media cache older than 2 hours
+    for cache_dir in ("/root/.hermes/image_cache", "/root/.hermes/document_cache", "/root/.hermes/audio_cache"):
+        subprocess.run(["/usr/bin/find", cache_dir, "-type", "f", "-mmin", "+120", "-delete"], capture_output=True, timeout=15)
+except Exception as e:
+    print(f"Warning in Google Drive sync: {e}")

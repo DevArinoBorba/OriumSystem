@@ -1,0 +1,449 @@
+#!/usr/bin/env node
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
+
+const rawArgs = process.argv.slice(2);
+const mode = (rawArgs[0] || 'overview').toLowerCase();
+const restArgs = rawArgs.slice(1);
+const queryArg = restArgs.filter((a) => !a.startsWith('--')).join(' ').trim();
+
+const ADMIN_ACTOR_ID = '084e08ab-7ef4-40ab-9f19-a1c3049c8b46'; // Arino
+const ADMIN_ACTOR_NAME = 'Arino (via Orium Agent)';
+const AUDIT_LOG_PATH = '/var/log/orium-agent-actions.jsonl';
+
+function parseFlags(args) {
+  const flags = {};
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg.startsWith('--')) {
+      const eqIdx = arg.indexOf('=');
+      if (eqIdx !== -1) {
+        const k = arg.slice(2, eqIdx).toLowerCase();
+        flags[k] = arg.slice(eqIdx + 1);
+      } else {
+        const k = arg.slice(2).toLowerCase();
+        const vals = [];
+        while (i + 1 < args.length && !args[i + 1].startsWith('--')) {
+          vals.push(args[i + 1]);
+          i++;
+        }
+        flags[k] = vals.length > 0 ? vals.join(' ').trim() : 'true';
+      }
+    }
+  }
+  return flags;
+}
+
+const flags = parseFlags(restArgs);
+
+function sqlLit(val) {
+  if (val === null || val === undefined) return 'NULL';
+  return `'${String(val).replace(/'/g, "''")}'`;
+}
+
+function getContainerEnv(containerName, varName) {
+  try {
+    const out = execFileSync(
+      'docker',
+      ['inspect', containerName, '--format', '{{range .Config.Env}}{{println .}}{{end}}'],
+      { encoding: 'utf8' },
+    );
+    for (const line of out.split('\n')) {
+      if (line.startsWith(`${varName}=`)) {
+        return line.slice(varName.length + 1).trim();
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return '';
+}
+
+function deriveVaultKey(secret) {
+  const keyBytes = crypto.hkdfSync(
+    'sha256',
+    Buffer.from(secret, 'utf8'),
+    Buffer.from('orium-vault-salt-v1', 'utf8'),
+    Buffer.from('client-credential-aes-256-gcm', 'utf8'),
+    32,
+  );
+  return Buffer.from(keyBytes);
+}
+
+function encryptSecret(secretKey, plaintext) {
+  const key = deriveVaultKey(secretKey);
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const encrypted = Buffer.concat([cipher.update(String(plaintext), 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `v1:${iv.toString('hex')}:${tag.toString('hex')}:${encrypted.toString('hex')}`;
+}
+
+function decryptSecret(secretKey, payload) {
+  try {
+    const parts = String(payload).split(':');
+    if (parts.length !== 4 || parts[0] !== 'v1') return '[formato inválido]';
+    const [, ivHex, tagHex, cipherHex] = parts;
+    const key = deriveVaultKey(secretKey);
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivHex, 'hex'));
+    decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
+    const decrypted = Buffer.concat([
+      decipher.update(Buffer.from(cipherHex, 'hex')),
+      decipher.final(),
+    ]);
+    return decrypted.toString('utf8');
+  } catch {
+    return '[erro ao descriptografar]';
+  }
+}
+
+function runPsqlJson(sql) {
+  const wrapped = `SELECT COALESCE(json_agg(t), '[]'::json)::text FROM (${sql}) t;`;
+  const out = execFileSync(
+    'docker',
+    [
+      'exec',
+      '-i',
+      'orium-production-postgres-1',
+      'psql',
+      '-U',
+      'orium_migrator',
+      '-d',
+      'orium_prod',
+      '-t',
+      '-A',
+      '-c',
+      wrapped,
+    ],
+    { encoding: 'utf8' },
+  ).trim();
+  return JSON.parse(out || '[]');
+}
+
+function runPsqlExec(sql) {
+  return execFileSync(
+    'docker',
+    [
+      'exec',
+      '-i',
+      'orium-production-postgres-1',
+      'psql',
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-U',
+      'orium_migrator',
+      '-d',
+      'orium_prod',
+      '-t',
+      '-A',
+      '-c',
+      sql,
+    ],
+    { encoding: 'utf8' },
+  ).trim();
+}
+
+function appendAuditLog(action, details) {
+  try {
+    const entry = {
+      timestamp: new Date().toISOString(),
+      actor: ADMIN_ACTOR_NAME,
+      action,
+      details,
+    };
+    fs.appendFileSync(AUDIT_LOG_PATH, JSON.stringify(entry) + '\n', 'utf8');
+  } catch {
+    // ignore
+  }
+}
+
+
+function resolveClient(clientQuery) {
+  if (!clientQuery) return null;
+  const q = String(clientQuery).trim();
+  const aliasMap = {
+    'gordinho celulares': 'Gordinho Locacoes',
+    'gordinho': 'Gordinho Locacoes',
+    'blackshark': 'Loja BlackShark',
+    'marcio': 'Marcio Sandim',
+    'solucell': 'SoluCell',
+  };
+  const mapped = aliasMap[q.toLowerCase()] || q;
+  const safe = mapped.replace(/'/g, "''");
+  const rows = runPsqlJson(`
+    SELECT id, name, contact_name, email, phone
+    FROM public.client
+    WHERE archived_at IS NULL
+      AND (id::text = '${safe}' OR name ILIKE '%${safe}%')
+    ORDER BY CASE WHEN LOWER(name) = LOWER('${safe}') THEN 0 ELSE 1 END, name ASC
+    LIMIT 1
+  `);
+  return rows[0] || null;
+}
+
+
+
+const WRITE_MODES = new Set([
+  'create-client',
+  'create-demand',
+  'instantiate-template',
+  'create-task',
+  'update-task-status',
+  'complete-task',
+  'comment-task',
+]);
+
+const safeSearch = queryArg.replace(/'/g, "''");
+
+try {
+  if (mode === 'overview') {
+    const stats = runPsqlJson(`
+      SELECT
+        (SELECT COUNT(*) FROM public.client WHERE archived_at IS NULL) AS active_clients,
+        (SELECT COUNT(*) FROM public.demand WHERE status != 'completed') AS open_demands,
+        (SELECT COUNT(*) FROM public.task WHERE status != 'completed') AS open_tasks,
+        (SELECT COUNT(*) FROM public.task WHERE status != 'completed' AND delivery_date < CURRENT_DATE) AS overdue_tasks,
+        (SELECT COUNT(*) FROM public.client_credential) AS total_credentials,
+        (SELECT COUNT(*) FROM public.demand_template WHERE active = true) AS active_templates
+    `);
+    console.log(JSON.stringify({ mode: 'overview', stats: stats[0] || {} }, null, 2));
+  } else if (mode === 'clients' || mode === 'client') {
+    const filter = safeSearch
+      ? `AND (c.name ILIKE '%${safeSearch}%' OR COALESCE(c.contact_name, '') ILIKE '%${safeSearch}%' OR COALESCE(c.notes, '') ILIKE '%${safeSearch}%')`
+      : '';
+    const clients = runPsqlJson(`
+      SELECT
+        c.id,
+        c.name,
+        c.contact_name,
+        c.email,
+        c.phone,
+        c.segment,
+        c.notes,
+        (
+          SELECT COALESCE(json_agg(json_build_object('title', s.title, 'category', s.category)), '[]'::json)
+          FROM public.client_scope_item s
+          WHERE s.client_id = c.id
+        ) AS scope_items,
+        (
+          SELECT COALESCE(json_agg(json_build_object('user', u.name, 'role', tm.functional_role)), '[]'::json)
+          FROM public.client_team_member tm
+          INNER JOIN public.auth_user u ON u.id = tm.user_id
+          WHERE tm.client_id = c.id
+        ) AS team
+      FROM public.client c
+      WHERE c.archived_at IS NULL ${filter}
+      ORDER BY c.name ASC
+      LIMIT 25
+    `);
+    console.log(JSON.stringify({ mode: 'clients', query: queryArg, clients }, null, 2));
+  } else if (mode === 'templates' || mode === 'template') {
+    const templates = runPsqlJson(`
+      SELECT
+        dt.id,
+        dt.title,
+        dt.description,
+        dt.category,
+        dt.default_priority,
+        dt.estimated_days,
+        (
+          SELECT COALESCE(json_agg(json_build_object(
+            'title', dtt.title,
+            'suggested_role', dtt.suggested_role,
+            'day_offset_start', dtt.day_offset_start,
+            'duration_days', dtt.duration_days,
+            'order_index', dtt.order_index
+          ) ORDER BY dtt.order_index ASC), '[]'::json)
+          FROM public.demand_template_task dtt
+          WHERE dtt.template_id = dt.id
+        ) AS tasks
+      FROM public.demand_template dt
+      WHERE dt.active = true
+      ORDER BY dt.title ASC
+    `);
+    console.log(JSON.stringify({ mode: 'templates', templates }, null, 2));
+  } else if (mode === 'team' || mode === 'users' || mode === 'equipe') {
+    const users = runPsqlJson(`
+      SELECT u.id, u.name, u.email, u.active, ur.role_id AS role
+      FROM public.auth_user u
+      LEFT JOIN public.user_role ur ON ur.user_id = u.id
+      WHERE u.active = true
+      ORDER BY u.name ASC
+    `);
+    console.log(JSON.stringify({ mode: 'team', users }, null, 2));
+  } else if (mode === 'bottlenecks' || mode === 'reports' || mode === 'gargalos') {
+    const summary = runPsqlJson(`
+      SELECT
+        (SELECT COUNT(*) FROM public.task WHERE status = 'blocked') AS blocked_tasks,
+        (SELECT COUNT(*) FROM public.task WHERE status = 'paused') AS paused_tasks,
+        (SELECT COUNT(*) FROM public.task WHERE status = 'in_review') AS in_review_tasks,
+        (SELECT COUNT(*) FROM public.task WHERE status = 'in_production') AS in_production_tasks,
+        (SELECT COUNT(*) FROM public.task WHERE status != 'completed' AND delivery_date < CURRENT_DATE) AS overdue_tasks,
+        (SELECT COUNT(*) FROM public.task WHERE status = 'completed') AS completed_tasks
+    `);
+    const criticalTasks = runPsqlJson(`
+      SELECT
+        t.id,
+        t.title,
+        t.status,
+        t.priority,
+        t.delivery_date,
+        t.pause_reason,
+        c.name AS client_name,
+        d.title AS demand_title,
+        u.name AS assignee
+      FROM public.task t
+      INNER JOIN public.demand d ON d.id = t.demand_id
+      INNER JOIN public.client c ON c.id = d.client_id
+      LEFT JOIN public.auth_user u ON u.id = t.assigned_to_user_id
+      WHERE t.status != 'completed'
+        AND (t.status IN ('blocked', 'paused', 'in_review') OR t.delivery_date <= CURRENT_DATE + INTERVAL '2 days')
+      ORDER BY t.delivery_date ASC
+      LIMIT 20
+    `);
+    console.log(JSON.stringify({ mode: 'bottlenecks', summary: summary[0] || {}, criticalTasks }, null, 2));
+  } else if (mode === 'credentials' || mode === 'vault' || mode === 'senhas' || mode === 'senha') {
+    const secretKey =
+      process.env.ORIUM_VAULT_KEY ||
+      getContainerEnv('orium-production-api-1', 'BETTER_AUTH_SECRET');
+    const filter = safeSearch
+      ? `WHERE (c.name ILIKE '%${safeSearch}%' OR cc.label ILIKE '%${safeSearch}%' OR cc.category ILIKE '%${safeSearch}%' OR cc.username ILIKE '%${safeSearch}%' OR COALESCE(cc.service_url, '') ILIKE '%${safeSearch}%')`
+      : '';
+    const rows = runPsqlJson(`
+      SELECT
+        cc.id,
+        c.name AS client_name,
+        cc.category,
+        cc.label,
+        cc.service_url,
+        cc.username,
+        cc.encrypted_secret,
+        cc.notes,
+        cc.updated_at
+      FROM public.client_credential cc
+      INNER JOIN public.client c ON c.id = cc.client_id
+      ${filter}
+      ORDER BY c.name ASC, cc.label ASC
+      LIMIT 30
+    `);
+    const credentials = rows.map((r) => ({
+      id: r.id,
+      clientName: r.client_name,
+      category: r.category,
+      service: r.label,
+      serviceUrl: r.service_url,
+      username: r.username,
+      password: decryptSecret(secretKey, r.encrypted_secret),
+      notes: r.notes,
+      updatedAt: r.updated_at,
+    }));
+    console.log(JSON.stringify({ mode: 'credentials', query: queryArg, credentials }, null, 2));
+  } else if (mode === 'demands' || mode === 'tasks' || mode === 'demandas') {
+    const filter = safeSearch
+      ? `AND (c.name ILIKE '%${safeSearch}%' OR d.title ILIKE '%${safeSearch}%')`
+      : '';
+    const demands = runPsqlJson(`
+      SELECT
+        d.id,
+        c.name AS client_name,
+        d.title,
+        d.priority,
+        d.status,
+        d.delivery_date,
+        (
+          SELECT COALESCE(json_agg(json_build_object(
+            'id', t.id,
+            'title', t.title,
+            'status', t.status,
+            'priority', t.priority,
+            'delivery_date', t.delivery_date,
+            'assignee', u.name
+          ) ORDER BY t.delivery_date ASC, t.created_at ASC), '[]'::json)
+          FROM public.task t
+          LEFT JOIN public.auth_user u ON u.id = t.assigned_to_user_id
+          WHERE t.demand_id = d.id
+        ) AS tasks
+      FROM public.demand d
+      INNER JOIN public.client c ON c.id = d.client_id
+      WHERE d.status != 'completed' ${filter}
+      ORDER BY d.delivery_date ASC NULLS LAST
+      LIMIT 25
+    `);
+    console.log(JSON.stringify({ mode: 'demands', query: queryArg, demands }, null, 2));
+  } else if (WRITE_MODES.has(mode)) {
+    // Escritas operacionais passam pelo orium-agent (mesmas regras, permissões e notificações da API).
+    console.log(JSON.stringify({
+      ok: false,
+      error: 'Este comando foi desativado aqui. Use /usr/local/bin/orium-agent (veja a skill orium-secretary).',
+    }, null, 2));
+    process.exit(1);
+  } else if (mode === 'save-credential') {
+    const clientQuery = flags.client || flags.c;
+    const label = (flags.label || flags.service || '').trim();
+    const username = (flags.username || flags.user || '').trim();
+    const secret = flags.secret || flags.password || flags.pass;
+    if (!clientQuery || !label || !username || !secret) {
+      throw new Error('Uso: save-credential --client "<Cliente>" --label "<Servico>" --username "<Usuario>" --secret "<Senha>" [--category hosting|cms|ads|social|analytics|email|domain|other] [--url "<URL>"] [--notes "<Notas>"]');
+    }
+    const client = resolveClient(clientQuery);
+    if (!client) throw new Error(`Cliente nao encontrado: ${clientQuery}`);
+    const secretKey =
+      process.env.ORIUM_VAULT_KEY ||
+      getContainerEnv('orium-production-api-1', 'BETTER_AUTH_SECRET');
+    if (!secretKey) throw new Error('Chave do cofre nao disponivel no container da API');
+
+    const encrypted = encryptSecret(secretKey, secret);
+    const category = (flags.category || 'other').toLowerCase();
+    const url = flags.url || null;
+    const notes = flags.notes || null;
+    const credId = crypto.randomUUID();
+
+    runPsqlExec(`
+      INSERT INTO public.client_credential (
+        id, client_id, category, label, service_url, username, encrypted_secret, notes, updated_by, created_at, updated_at
+      ) VALUES (
+        ${sqlLit(credId)}, ${sqlLit(client.id)}, ${sqlLit(category)}, ${sqlLit(label)}, ${sqlLit(url)},
+        ${sqlLit(username)}, ${sqlLit(encrypted)}, ${sqlLit(notes)}, ${sqlLit(ADMIN_ACTOR_ID)}, NOW(), NOW()
+      );
+    `);
+    appendAuditLog('save-credential', { credId, clientId: client.id, clientName: client.name, category, label, username });
+    console.log(JSON.stringify({
+      ok: true,
+      action: 'save-credential',
+      credential: { id: credId, clientName: client.name, category, label, username, serviceUrl: url, encryption: 'AES-256-GCM (v1)' },
+    }, null, 2));
+  } else if (mode === 'audit-log') {
+    let logs = [];
+    if (fs.existsSync(AUDIT_LOG_PATH)) {
+      logs = fs.readFileSync(AUDIT_LOG_PATH, 'utf8')
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .slice(-25)
+        .map((l) => { try { return JSON.parse(l); } catch { return { raw: l }; } });
+    }
+    console.log(JSON.stringify({ mode: 'audit-log', recentActions: logs }, null, 2));
+  } else {
+    console.log(
+      JSON.stringify({
+        error: 'Modo desconhecido.',
+        availableModes: [
+          'overview',
+          'clients [busca]',
+          'demands [busca]',
+          'templates',
+          'team',
+          'bottlenecks',
+          'credentials [busca]',
+          'audit-log',
+          'escritas operacionais: use /usr/local/bin/orium-agent',
+          'save-credential --client "..." --label "..." --username "..." --secret "..." [--category other] [--url "..."]',
+        ],
+      }, null, 2),
+    );
+  }
+} catch (err) {
+  console.log(JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err) }, null, 2));
+  process.exit(1);
+}

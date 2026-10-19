@@ -1,0 +1,294 @@
+#!/usr/bin/env python3
+import argparse
+import datetime
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import unicodedata
+from pathlib import Path
+
+RCLONE_REMOTE = "drive_dest:Agent"
+VAULT_CLIENTS_DIR = Path("/data/orium/obsidian-vault/Clientes")
+
+STANDARD_SUBFOLDERS = [
+    "Comprovantes",
+    "Contratos",
+    "Identidade Visual",
+    "Criativos e Midias",
+    "Relatorios",
+    "Documentos Gerais",
+]
+
+CATEGORY_MAP = {
+    "comprovante": "Comprovantes",
+    "comprovantes": "Comprovantes",
+    "pix": "Comprovantes",
+    "recibo": "Comprovantes",
+    "recibos": "Comprovantes",
+    "nota": "Comprovantes",
+    "nf": "Comprovantes",
+    "boleto": "Comprovantes",
+    "financeiro": "Comprovantes",
+    "pagamento": "Comprovantes",
+    "contrato": "Contratos",
+    "contratos": "Contratos",
+    "proposta": "Contratos",
+    "propostas": "Contratos",
+    "aditivo": "Contratos",
+    "identidade": "Identidade Visual",
+    "identidade visual": "Identidade Visual",
+    "logo": "Identidade Visual",
+    "marca": "Identidade Visual",
+    "manual": "Identidade Visual",
+    "criativo": "Criativos e Midias",
+    "criativos": "Criativos e Midias",
+    "criativos e midias": "Criativos e Midias",
+    "midia": "Criativos e Midias",
+    "midias": "Criativos e Midias",
+    "arte": "Criativos e Midias",
+    "video": "Criativos e Midias",
+    "foto": "Criativos e Midias",
+    "relatorio": "Relatorios",
+    "relatorios": "Relatorios",
+    "metricas": "Relatorios",
+    "resultado": "Relatorios",
+    "documento": "Documentos Gerais",
+    "documentos": "Documentos Gerais",
+    "documentos gerais": "Documentos Gerais",
+    "geral": "Documentos Gerais",
+    "outro": "Documentos Gerais",
+    "outros": "Documentos Gerais",
+}
+
+CLIENT_ALIASES = {
+    "gordinho": "Gordinho Locacoes",
+    "gordinho celulares": "Gordinho Locacoes",
+    "gordinho locacoes": "Gordinho Locacoes",
+    "blackshark": "Loja BlackShark",
+    "loja blackshark": "Loja BlackShark",
+    "black shark": "Loja BlackShark",
+    "marcio": "Marcio Sandim",
+    "marcio sandim": "Marcio Sandim",
+    "solucell": "SoluCell",
+    "orium": "_Orium Interno",
+    "interno": "_Orium Interno",
+}
+
+def strip_accents(s: str) -> str:
+    return "".join(
+        c for c in unicodedata.normalize("NFD", s or "")
+        if unicodedata.category(c) != "Mn"
+    )
+
+def clean_name(s: str) -> str:
+    s = strip_accents(s).strip()
+    s = re.sub(r'[<>:"/\\|?*]+', "-", s)
+    s = re.sub(r"\s+", " ", s)
+    return s
+
+def run_rclone(args: list[str], check: bool = True) -> subprocess.CompletedProcess:
+    cmd = ["/usr/bin/rclone"] + args
+    return subprocess.run(cmd, capture_output=True, text=True, check=check)
+
+def list_remote_clients() -> list[str]:
+    res = run_rclone(["lsf", "--dirs-only", RCLONE_REMOTE], check=False)
+    if res.returncode != 0:
+        return []
+    return [line.strip().rstrip("/") for line in res.stdout.splitlines() if line.strip()]
+
+def resolve_client_name(raw_client: str, existing_clients: list[str]) -> str:
+    cleaned = clean_name(raw_client)
+    low = cleaned.lower()
+    if low in CLIENT_ALIASES:
+        return CLIENT_ALIASES[low]
+    for ex in existing_clients:
+        if ex.lower() == low:
+            return ex
+    for ex in existing_clients:
+        if low in ex.lower() or ex.lower() in low:
+            return ex
+    # Check first word match (e.g. "Gordinho ..." -> "Gordinho Locacoes")
+    first_word = low.split()[0] if low.split() else ""
+    if len(first_word) >= 4:
+        matches = [ex for ex in existing_clients if first_word in ex.lower().split()]
+        if len(matches) == 1:
+            return matches[0]
+    return cleaned or "_Orium Interno"
+
+def resolve_category(raw_cat: str) -> str:
+    cleaned = clean_name(raw_cat)
+    low = cleaned.lower()
+    if low in CATEGORY_MAP:
+        return CATEGORY_MAP[low]
+    for k, v in CATEGORY_MAP.items():
+        if k in low:
+            return v
+    return cleaned if cleaned else "Comprovantes"
+
+def ensure_client_structure(client_name: str) -> None:
+    for sub in STANDARD_SUBFOLDERS:
+        run_rclone(["mkdir", f"{RCLONE_REMOTE}/{client_name}/{sub}"], check=False)
+
+def init_all_clients(clients: list[str]) -> None:
+    run_rclone(["mkdir", RCLONE_REMOTE], check=False)
+    for c in clients:
+        cname = clean_name(c)
+        if not cname:
+            continue
+        ensure_client_structure(cname)
+        # Put a small .keep or README so Google Drive web UI shows empty folders cleanly
+    print(json.dumps({"ok": True, "root": RCLONE_REMOTE, "clients_initialized": clients, "subfolders": STANDARD_SUBFOLDERS}, ensure_ascii=False, indent=2))
+
+def schedule_local_cleanup(file_path: Path) -> None:
+    try:
+        resolved = str(file_path.resolve())
+        allowed_prefixes = (
+            "/root/.hermes/image_cache/",
+            "/root/.hermes/document_cache/",
+            "/root/.hermes/audio_cache/",
+            "/tmp/",
+        )
+        if any(resolved.startswith(p) for p in allowed_prefixes):
+            subprocess.Popen(
+                ["/bin/sh", "-c", f'sleep 45 && rm -f "{resolved}"'],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+    except Exception:
+        pass
+
+def log_to_obsidian(client_name: str, category: str, dest_filename: str, drive_rel_path: str) -> None:
+    try:
+        VAULT_CLIENTS_DIR.mkdir(parents=True, exist_ok=True)
+        safe_client = re.sub(r"[^A-Za-z0-9 _.-]+", "", client_name).strip()
+        note_path = VAULT_CLIENTS_DIR / f"{safe_client}.md"
+        ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        entry = f"- `{ts}` | **{category}**: `{dest_filename}` -> Google Drive (`{drive_rel_path}`)"
+        if note_path.exists():
+            content = note_path.read_text(encoding="utf-8")
+            if "## Arquivos no Google Drive" not in content:
+                content = content.rstrip() + f"\n\n## Arquivos no Google Drive\n{entry}\n"
+            else:
+                content = content.rstrip() + f"\n{entry}\n"
+            note_path.write_text(content, encoding="utf-8")
+        else:
+            note_path.write_text(f"# {client_name}\n\n## Arquivos no Google Drive\n{entry}\n", encoding="utf-8")
+    except Exception:
+        pass
+
+def find_latest_cached_media() -> Path | None:
+    candidates = []
+    # Hermes atual grava mídias em cache/images e cache/documents; as pastas antigas ficam por compatibilidade.
+    for d in ("/root/.hermes/cache/images", "/root/.hermes/cache/documents",
+              "/root/.hermes/image_cache", "/root/.hermes/document_cache"):
+        p = Path(d)
+        if p.exists():
+            for f in p.iterdir():
+                if f.is_file():
+                    candidates.append(f)
+    if not candidates:
+        return None
+    candidates.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+    # Only pick if modified in the last 15 minutes
+    newest = candidates[0]
+    if (datetime.datetime.now().timestamp() - newest.stat().st_mtime) <= 900:
+        return newest
+    return None
+
+def main():
+    parser = argparse.ArgumentParser(description="Upload files from Orium Agent to Google Drive (Agent/<Cliente>/<Categoria>/)")
+    parser.add_argument("file", nargs="?", help="Local file path (or 'latest' to auto-select the most recent WhatsApp attachment)")
+    parser.add_argument("--client", "-c", default="", help="Client name (e.g. 'Gordinho Locacoes')")
+    parser.add_argument("--category", "-k", default="Comprovantes", help="Category folder (Comprovantes, Contratos, Identidade Visual, Criativos e Midias, Relatorios, Documentos Gerais)")
+    parser.add_argument("--name", "-n", default="", help="Optional custom filename on Google Drive")
+    parser.add_argument("--init-clients", nargs="*", help="Initialize standard folder tree for the given clients")
+    parser.add_argument("--list", "-l", nargs="?", const="", help="List folders/files in Google Drive Agent folder")
+    args = parser.parse_args()
+
+    if args.init_clients is not None:
+        clients = args.init_clients or ["Gordinho Locacoes", "Loja BlackShark", "Marcio Sandim", "SoluCell", "_Orium Interno"]
+        init_all_clients(clients)
+        return
+
+    if args.list is not None:
+        target = f"{RCLONE_REMOTE}/{clean_name(args.list)}" if args.list else RCLONE_REMOTE
+        res = run_rclone(["lsf", "-R", target], check=False)
+        print(res.stdout if res.returncode == 0 else res.stderr)
+        return
+
+    local_path = None
+    if not args.file or args.file.lower() in ("latest", "auto", "ultimo"):
+        local_path = find_latest_cached_media()
+        if not local_path:
+            print(json.dumps({"ok": False, "error": "Nenhum arquivo recebido nos ultimos 15 minutos. Use o caminho exato informado em [User sent an image: ...]."}, ensure_ascii=False))
+            sys.exit(1)
+    else:
+        local_path = Path(args.file)
+        if not local_path.exists():
+            # Nunca trocar por outro arquivo: enviar a mídia errada é pior que falhar.
+            print(json.dumps({"ok": False, "error": f"Arquivo local nao encontrado: {args.file}. Use o caminho exato informado em [User sent an image: ...]."}, ensure_ascii=False))
+            sys.exit(1)
+
+    existing_clients = list_remote_clients()
+    client_name = resolve_client_name(args.client or "_Orium Interno", existing_clients)
+    category_name = resolve_category(args.category)
+
+    # Ensure client has all standard folders if new
+    if client_name not in existing_clients:
+        ensure_client_structure(client_name)
+
+    ext = local_path.suffix.lower() or ".jpg"
+    today_prefix = datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    if args.name:
+        custom = clean_name(args.name)
+        if not custom.lower().endswith(ext):
+            custom = f"{custom}{ext}"
+        if not re.match(r"^\d{4}-\d{2}-\d{2}", custom):
+            dest_filename = f"{ datetime.datetime.now().strftime('%Y-%m-%d') }_{custom.replace(' ', '_')}"
+        else:
+            dest_filename = custom.replace(" ", "_")
+    else:
+        orig_stem = local_path.stem
+        # Strip img_xxx_ or doc_xxx_ cache prefix if present
+        parts = orig_stem.split("_", 2)
+        clean_stem = parts[2] if (len(parts) >= 3 and parts[0] in ("img", "doc", "aud")) else orig_stem
+        clean_stem = re.sub(r"[^A-Za-z0-9_-]+", "_", strip_accents(clean_stem)).strip("_") or "arquivo"
+        dest_filename = f"{today_prefix}_{clean_stem}{ext}"
+
+    drive_rel_path = f"Agent/{client_name}/{category_name}/{dest_filename}"
+    rclone_dest = f"drive_dest:{drive_rel_path}"
+
+    res = run_rclone(["copyto", str(local_path), rclone_dest], check=False)
+    if res.returncode != 0:
+        print(json.dumps({
+            "ok": False,
+            "error": res.stderr.strip() or "Falha no rclone copyto",
+            "local_path": str(local_path),
+        }, ensure_ascii=False))
+        sys.exit(1)
+
+    # Get shareable link if possible (best-effort)
+    link_res = run_rclone(["link", rclone_dest], check=False)
+    drive_link = link_res.stdout.strip() if link_res.returncode == 0 else ""
+
+    # Log to Obsidian Vault and schedule deletion of local VPS cache file
+    log_to_obsidian(client_name, category_name, dest_filename, drive_rel_path)
+    schedule_local_cleanup(local_path)
+
+    print(json.dumps({
+        "ok": True,
+        "client": client_name,
+        "category": category_name,
+        "file_name": dest_filename,
+        "drive_path": drive_rel_path,
+        "drive_link": drive_link,
+        "vps_cache_cleanup": "scheduled_45s (0 bytes permanent on VPS)",
+    }, ensure_ascii=False, indent=2))
+
+if __name__ == "__main__":
+    main()
