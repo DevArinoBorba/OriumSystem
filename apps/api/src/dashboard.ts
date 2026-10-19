@@ -36,6 +36,7 @@ interface TaskSnapshotRow {
   task_status: TaskStatus;
   accepted_at: Date | string | null;
   started_at: Date | string | null;
+  ready_at: Date | string | null;
   pause_requested_at: Date | string | null;
   pause_reason: string | null;
   paused_at: Date | string | null;
@@ -146,6 +147,7 @@ function mapTaskToDashboardItem(
     deliveryDate: t.task_delivery_date,
     taskId: t.task_id,
     startedAt: t.started_at ? new Date(t.started_at).toISOString() : null,
+    readyAt: t.ready_at ? new Date(t.ready_at).toISOString() : null,
     reason: reason ?? null,
     assignedTo: scope === 'all'
       ? { id: t.assigned_to_user_id, name: t.assigned_to_name }
@@ -236,6 +238,7 @@ export async function getDashboard(
         t.status AS task_status,
         t.accepted_at,
         t.started_at,
+        t.ready_at,
         t.pause_requested_at,
         t.pause_reason,
         t.paused_at,

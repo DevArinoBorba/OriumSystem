@@ -41,3 +41,29 @@ export function todayInAgency(): string {
     day: '2-digit',
   }).format(new Date());
 }
+
+/** Data de calendário (YYYY-MM-DD) de um instante ISO, no fuso da agência. */
+export function calendarDateInAgency(iso: string): string | null {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Cuiaba',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+/**
+ * Espera na fila desde que a tarefa ficou PRONTA PARA INICIAR (ready_at) até hoje.
+ * A partir de 2 dias parada vira alerta ("stale").
+ */
+export function queueWait(readyAtIso: string, today: string): { label: string; stale: boolean } | null {
+  const readyDay = calendarDateInAgency(readyAtIso);
+  const from = readyDay ? calendarToUtcDays(readyDay) : null;
+  const now = calendarToUtcDays(today);
+  if (from === null || now === null) return null;
+  const days = Math.max(0, Math.round(now - from));
+  if (days === 0) return { label: 'pronta hoje', stale: false };
+  return { label: days === 1 ? 'na fila há 1 dia' : `na fila há ${days} dias`, stale: days >= 2 };
+}

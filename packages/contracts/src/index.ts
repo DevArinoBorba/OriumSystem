@@ -618,6 +618,8 @@ export const dashboardTaskItemSchema = z.object({
   deliveryDate: calendarDateSchema,
   taskId: z.string().uuid(),
   startedAt: z.string().datetime({ offset: true }).nullable(),
+  /** Quando os requisitos foram atendidos (PRONTA PARA INICIAR); mede a espera na fila. */
+  readyAt: z.string().datetime({ offset: true }).nullable().optional(),
   reason: z.string().nullable().optional(),
   assignedTo: dashboardItemUserSchema.nullable().optional(),
 }).strict();

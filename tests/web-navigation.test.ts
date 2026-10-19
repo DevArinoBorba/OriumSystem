@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseRoute, routePath } from '../apps/web/src/router.js';
-import { formatCalendarDate, relativeDeadline } from '../apps/web/src/dates.js';
+import { formatCalendarDate, queueWait, relativeDeadline } from '../apps/web/src/dates.js';
 
 describe('rotas do frontend', () => {
   it('reconhece telas e ignora caminhos desconhecidos', () => {
@@ -46,5 +46,15 @@ describe('prazos relativos', () => {
     expect(relativeDeadline('2027-01-01', '2026-12-31')?.label).toBe('amanhã');
     expect(relativeDeadline('invalida', today)).toBeNull();
     expect(formatCalendarDate('2026-10-19')).toBe('19/10/2026');
+  });
+});
+
+describe('espera na fila', () => {
+  it('conta dias no fuso da agência desde ready_at', () => {
+    // 02:00Z do dia 19 ainda é dia 18 em Cuiabá (UTC-4)
+    expect(queueWait('2026-10-19T02:00:00Z', '2026-10-19')).toEqual({ label: 'na fila há 1 dia', stale: false });
+    expect(queueWait('2026-10-19T15:00:00Z', '2026-10-19')).toEqual({ label: 'pronta hoje', stale: false });
+    expect(queueWait('2026-10-15T15:00:00Z', '2026-10-19')).toEqual({ label: 'na fila há 4 dias', stale: true });
+    expect(queueWait('invalida', '2026-10-19')).toBeNull();
   });
 });

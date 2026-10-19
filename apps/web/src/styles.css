@@ -5685,3 +5685,22 @@ dialog.native-dialog::backdrop {
     display: none;
   }
 }
+
+/* Espera na fila (pronta para iniciar, sem início) */
+.queue-chip {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  width: fit-content;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: var(--color-surface-hover);
+}
+
+.queue-chip.stale {
+  color: var(--color-warning-text);
+  background: var(--color-warning-bg);
+}

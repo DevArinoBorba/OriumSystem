@@ -866,7 +866,7 @@ describe('Dashboard Operacional — Fase 4 contra PostgreSQL orium_test', () => 
 
       // Configurar diretamente no banco os estados cirúrgicos de cada tarefa
       // 1. ready com accepted_at preenchido -> 'Pronta aguardando início da produção'
-      await db().pool.query(`UPDATE task SET status = 'ready', accepted_at = '2026-02-01T10:00:00Z' WHERE id = $1`, [tasks['ready-accepted']]);
+      await db().pool.query(`UPDATE task SET status = 'ready', accepted_at = '2026-02-01T10:00:00Z', ready_at = '2026-02-01T09:30:00Z' WHERE id = $1`, [tasks['ready-accepted']]);
 
       // 2. ready com accepted_at nulo -> 'Pronta aguardando aceite do responsável'
       await db().pool.query(`UPDATE task SET status = 'ready', accepted_at = NULL WHERE id = $1`, [tasks['ready-unaccepted']]);
@@ -920,6 +920,11 @@ describe('Dashboard Operacional — Fase 4 contra PostgreSQL orium_test', () => 
         expect(item, `Tarefa ${label} (${taskId}) deve estar presente em awaitingAction`).toBeDefined();
         expect(item?.reason).toBe(expectedReason);
       }
+
+      // Espera na fila: readyAt projetado em ISO para tarefas prontas (startedAt ainda nulo)
+      const readyItem = awaitingItems.find((i) => i.id === tasks['ready-accepted']);
+      expect(readyItem?.kind === 'task' ? readyItem.readyAt : undefined).toBe('2026-02-01T09:30:00.000Z');
+      expect(readyItem?.startedAt).toBeNull();
     });
   });
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DashboardItem, DashboardResponse, SessionResponse } from '@orium/contracts';
 import { api, ApiError } from '../api.js';
-import { formatCalendarDate, relativeDeadline } from '../dates.js';
+import { formatCalendarDate, queueWait, relativeDeadline } from '../dates.js';
 import type { DashboardSectionKey } from '../types.js';
 
 interface DashboardViewProps {
@@ -32,6 +32,12 @@ const priorityLabels: Record<string, string> = {
 const formatDate = formatCalendarDate;
 
 const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/** Espera na fila só faz sentido para tarefa pronta e ainda não iniciada. */
+function queueWaitFor(item: DashboardItem, today: string) {
+  if (item.kind !== 'task' || item.status !== 'ready' || item.startedAt || !item.readyAt) return null;
+  return queueWait(item.readyAt, today);
+}
 
 /** Atualização automática silenciosa enquanto a aba está visível. */
 const AUTO_REFRESH_MS = 120_000;
@@ -352,6 +358,10 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
           {item.kind === 'task' && item.assignedTo ? (
             <span>Responsável: <strong>{item.assignedTo.name}</strong></span>
           ) : null}
+          {(() => {
+            const wait = data ? queueWaitFor(item, data.today) : null;
+            return wait ? <span className={`queue-chip ${wait.stale ? 'stale' : ''}`}>{wait.label}</span> : null;
+          })()}
         </div>
         {item.reason && <p className="dashboard-item-reason">{item.reason}</p>}
       </div>
@@ -823,6 +833,18 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
                             </div>
 
                             <h3 className="kanban-card-title">{item.title}</h3>
+
+                            {(() => {
+                              const wait = queueWaitFor(item, data.today);
+                              return wait ? (
+                                <span
+                                  className={`queue-chip ${wait.stale ? 'stale' : ''}`}
+                                  title="Tempo desde que os requisitos foram atendidos, sem início da produção"
+                                >
+                                  {wait.label}
+                                </span>
+                              ) : null;
+                            })()}
 
                             {(() => {
                               const isBoilerplate =
