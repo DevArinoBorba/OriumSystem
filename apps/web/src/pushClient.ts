@@ -16,6 +16,12 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray;
 }
 
+function sameKey(current: ArrayBuffer | null, expected: Uint8Array): boolean {
+  if (!current) return false;
+  const bytes = new Uint8Array(current);
+  return bytes.length === expected.length && bytes.every((value, index) => value === expected[index]);
+}
+
 export interface PushSubscribeResult {
   ok: boolean;
   permission: NotificationPermission | 'unsupported';
@@ -57,6 +63,11 @@ export async function ensurePushSubscription(options?: {
     const applicationServerKey = urlBase64ToUint8Array(publicKey);
 
     let subscription = await registration.pushManager.getSubscription();
+    // Chave do servidor trocada (rotação VAPID): a inscrição antiga não recebe mais push.
+    if (subscription && !sameKey(subscription.options.applicationServerKey, applicationServerKey)) {
+      await subscription.unsubscribe().catch(() => false);
+      subscription = null;
+    }
     if (!subscription) {
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,

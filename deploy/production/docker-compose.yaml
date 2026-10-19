@@ -57,6 +57,10 @@ services:
       DATABASE_URL: postgresql://orium_app:\${ORIUM_APP_PASSWORD:?Configure ORIUM_APP_PASSWORD}@postgres:5432/orium_prod
       BETTER_AUTH_SECRET: \${BETTER_AUTH_SECRET:?Configure BETTER_AUTH_SECRET}
       LOG_LEVEL: info
+      # Chaves Web Push (Fase 8); vazias = chaves padrão do código.
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
     command: ["node", "dist/server.js"]
     depends_on:
       migrate:
