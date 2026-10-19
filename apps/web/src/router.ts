@@ -19,8 +19,6 @@ const tabPaths: Record<ActiveTab, string> = {
   materials: '/materiais',
   notifications: '/notificacoes',
   reports: '/relatorios',
-  backups: '/backups',
-  vault: '/cofre',
   profile: '/perfil',
 };
 

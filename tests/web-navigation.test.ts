@@ -8,6 +8,9 @@ describe('rotas do frontend', () => {
     expect(parseRoute('/clientes/')).toEqual({ tab: 'clients', demandId: null, taskId: null });
     expect(parseRoute('/')).toBeNull();
     expect(parseRoute('/inexistente')).toBeNull();
+    // Telas removidas da interface: endereços antigos caem na tela inicial.
+    expect(parseRoute('/cofre')).toBeNull();
+    expect(parseRoute('/backups')).toBeNull();
   });
 
   it('extrai chamado e tarefa somente em /demandas', () => {

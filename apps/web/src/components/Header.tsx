@@ -155,26 +155,6 @@ export function Header({
             Equipe
           </button>
         )}
-        {isAdmin && (
-          <button
-            type="button"
-            className={`nav-tab ${activeTab === 'vault' ? 'active' : ''}`}
-            onClick={() => onSelectTab('vault')}
-            aria-current={activeTab === 'vault' ? 'page' : undefined}
-          >
-            Cofre &amp; Hermes
-          </button>
-        )}
-        {isAdmin && (
-          <button
-            type="button"
-            className={`nav-tab ${activeTab === 'backups' ? 'active' : ''}`}
-            onClick={() => onSelectTab('backups')}
-            aria-current={activeTab === 'backups' ? 'page' : undefined}
-          >
-            Backups
-          </button>
-        )}
       </nav>
 
       {/* 3. Ações no canto direito: Notificações + Tema + Perfil Circular estilo Google */}

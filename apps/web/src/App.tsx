@@ -16,7 +16,6 @@ import type { AppRoute } from './router.js';
 import type { ActiveTab, MaterialNavigationTarget } from './types.js';
 
 // Telas menos frequentes carregam sob demanda para reduzir o bundle inicial.
-const BackupsView = lazy(() => import('./components/BackupsView.js').then((m) => ({ default: m.BackupsView })));
 const MaterialsView = lazy(() => import('./components/MaterialsView.js').then((m) => ({ default: m.MaterialsView })));
 const MobileAppView = lazy(() => import('./components/MobileAppView.js').then((m) => ({ default: m.MobileAppView })));
 const NotificationsView = lazy(() =>
@@ -25,7 +24,6 @@ const NotificationsView = lazy(() =>
 const ProfileView = lazy(() => import('./components/ProfileView.js').then((m) => ({ default: m.ProfileView })));
 const ReportsView = lazy(() => import('./components/ReportsView.js').then((m) => ({ default: m.ReportsView })));
 const TeamView = lazy(() => import('./components/TeamView.js').then((m) => ({ default: m.TeamView })));
-const VaultView = lazy(() => import('./components/VaultView.js').then((m) => ({ default: m.VaultView })));
 
 type ViewState = 'checking' | 'signed-out' | 'signed-in';
 
@@ -53,9 +51,6 @@ function canAccessTab(tab: ActiveTab, session: SessionResponse): boolean {
       return perms.includes('materials.read');
     case 'team':
       return perms.includes('users.read');
-    case 'vault':
-    case 'backups':
-      return isAdmin;
     case 'profile':
       return true;
   }
@@ -70,8 +65,6 @@ const tabLabels: Record<ActiveTab, string> = {
   materials: 'Materiais',
   notifications: 'Notificações',
   team: 'Equipe',
-  vault: 'Cofre & Hermes',
-  backups: 'Backups',
   profile: 'Meu perfil',
 };
 
@@ -514,14 +507,6 @@ export function App() {
 
         {activeTab === 'team' && hasUsersRead && (
           <TeamView session={session} onUnauthorized={handleUnauthorized} />
-        )}
-
-        {activeTab === 'vault' && isAdmin && (
-          <VaultView onUnauthorized={handleUnauthorized} />
-        )}
-
-        {activeTab === 'backups' && isAdmin && (
-          <BackupsView session={session} onUnauthorized={handleUnauthorized} />
         )}
 
         {activeTab === 'profile' && (
