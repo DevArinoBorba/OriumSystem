@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Demand, SessionResponse, Task, TaskComment } from '@orium/contracts';
 import { api, ApiError } from '../api.js';
+import { showToast } from './Toasts.js';
 import { todayInAgency } from '../dates.js';
 import { ensurePushSubscription, triggerServerTestPush } from '../pushClient.js';
 
@@ -196,7 +197,7 @@ export function MobileAppView({
     const controller = new AbortController();
     try {
       await api.acceptTask(t.id, { version: t.version }, controller.signal, onUnauthorized);
-      setNotice(`Tarefa "${t.title}" aceita com sucesso.`);
+      showToast(`Tarefa "${t.title}" aceita com sucesso.`);
       await loadData();
     } catch (err) {
       setError(err instanceof ApiError ? `Erro ao aceitar tarefa (${err.code}).` : 'Não foi possível aceitar a tarefa.');
@@ -218,7 +219,7 @@ export function MobileAppView({
       } else {
         await api.startTask(t.id, { version: t.version }, controller.signal, onUnauthorized);
       }
-      setNotice(`Relógio operacional iniciado para "${t.title}"!`);
+      showToast(`Relógio operacional iniciado para "${t.title}"!`);
       await loadData();
     } catch (err) {
       setError(
@@ -252,7 +253,7 @@ export function MobileAppView({
       setReviewFormTaskId(null);
       setDeliveryNotes('');
       setPreviewUrl('');
-      setNotice(`Tarefa "${t.title}" enviada para revisão!`);
+      showToast(`Tarefa "${t.title}" enviada para revisão!`);
       await loadData();
     } catch (err) {
       setError(err instanceof ApiError ? `Falha ao enviar p/ revisão (${err.code}).` : 'Erro ao enviar para revisão.');
@@ -274,7 +275,7 @@ export function MobileAppView({
         controller.signal,
         onUnauthorized,
       );
-      setNotice(`Tarefa "${t.title}" aprovada e concluída!`);
+      showToast(`Tarefa "${t.title}" aprovada e concluída!`);
       await loadData();
     } catch (err) {
       setError(err instanceof ApiError ? `Erro ao aprovar tarefa (${err.code}).` : 'Não foi possível aprovar a tarefa.');
@@ -310,7 +311,7 @@ export function MobileAppView({
       const res = await api.addTaskComment(taskId, { content }, controller.signal, onUnauthorized);
       setCommentsByTask((prev) => ({ ...prev, [taskId]: res.comments }));
       setNewCommentText('');
-      setNotice('Comentário registrado na tarefa.');
+      showToast('Comentário registrado na tarefa.');
     } catch {
       setError('Não foi possível enviar o comentário.');
     } finally {

@@ -5320,8 +5320,25 @@ dialog.native-dialog::backdrop {
   }
 
   .mobile-bottom-icon {
-    font-size: 1.1rem;
-    line-height: 1.1;
+    position: relative;
+    display: inline-flex;
+    line-height: 1;
+  }
+
+  .mobile-bottom-badge {
+    position: absolute;
+    top: -6px;
+    right: -10px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--color-danger, #ef4444);
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: center;
   }
 }
 
@@ -5478,4 +5495,76 @@ dialog.native-dialog::backdrop {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* Avisos rápidos (toasts) */
+.toast-host {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(380px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-success);
+  border-radius: 10px;
+  background: var(--color-surface-elevated);
+  color: var(--color-text-main);
+  font-size: 0.9rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  pointer-events: auto;
+  animation: toast-in 0.18s ease-out;
+}
+
+.toast-icon {
+  color: var(--color-success);
+  font-weight: 700;
+}
+
+.toast-message {
+  flex: 1;
+}
+
+.toast-close {
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .toast-host {
+    right: 16px;
+    left: 16px;
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+    max-width: none;
+  }
 }

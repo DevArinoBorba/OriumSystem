@@ -11,6 +11,7 @@ import {
   type Task,
 } from '@orium/contracts';
 import { api, ApiError } from '../api.js';
+import { showToast } from './Toasts.js';
 import { DeadlineDate } from './DeadlineDate.js';
 import { TaskDetailView } from './TaskDetailView.js';
 import { UseTemplateModal } from './UseTemplateModal.js';
@@ -452,7 +453,7 @@ export function DemandsView({
       const response = await api.createDemand(validation.data, controller.signal, onUnauthorized);
       const created = response.demand;
       setDemandFormOpen(false);
-      setNotice(`${created.title} criado com sucesso.`);
+      showToast(`${created.title} criado com sucesso.`);
       setSelectedDemandId(created.id);
       void loadDemandDetail(created.id);
       void loadDemands(page, status, priority, appliedSearch);
@@ -471,7 +472,7 @@ export function DemandsView({
   }
 
   function handleDemandCreatedFromTemplate(createdDemandId: string, createdTitle: string) {
-    setNotice(`Chamado "${createdTitle}" criado a partir do template com sucesso.`);
+    showToast(`Chamado "${createdTitle}" criado a partir do template com sucesso.`);
     setSelectedDemandId(createdDemandId);
     void loadDemandDetail(createdDemandId);
     void loadDemands(1, status, priority, appliedSearch);
@@ -532,7 +533,7 @@ export function DemandsView({
     try {
       await api.updateDemand(demand.id, validation.data, controller.signal, onUnauthorized);
       setEditOpen(false);
-      setNotice('Dados do chamado atualizados com sucesso.');
+      showToast('Dados do chamado atualizados com sucesso.');
       setDemandFormOpen(false);
       if (selectedDemandId) {
         void loadDemandDetail(selectedDemandId);
@@ -603,7 +604,7 @@ export function DemandsView({
     try {
       const response = await api.completeDemand(demand.id, { version: demand.version }, controller.signal, onUnauthorized);
       setCompleteConfirm(false);
-      setNotice(`Demanda "${response.demand.title}" concluída com sucesso.`);
+      showToast(`Demanda "${response.demand.title}" concluída com sucesso.`);
       if (selectedDemandId) {
         void loadDemandDetail(selectedDemandId);
       }
@@ -742,7 +743,7 @@ export function DemandsView({
       const response = await api.createTask(validation.data, controller.signal, onUnauthorized);
       const created = response.task;
       setTaskFormOpen(false);
-      setNotice(`Tarefa "${created.title}" criada com sucesso.`);
+      showToast(`Tarefa "${created.title}" criada com sucesso.`);
       setSelectedTaskId(null);
       if (selectedDemandId) {
         void loadDemandDetail(selectedDemandId);

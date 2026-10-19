@@ -7,6 +7,7 @@ import {
   type SessionResponse,
 } from '@orium/contracts';
 import { api, ApiError } from '../api.js';
+import { showToast } from './Toasts.js';
 import type { ClientFormState, ClientsFilterStatus } from '../types.js';
 
 interface ClientsViewProps {
@@ -240,7 +241,7 @@ export function ClientsView({ session, onUnauthorized, onOpenMaterials }: Client
       const controller = new AbortController();
       try {
         await api.updateClient(editingClient.id, validation.data, controller.signal, onUnauthorized);
-        setNoticeMessage(`Cliente "${formState.name.trim()}" atualizado com sucesso.`);
+        showToast(`Cliente "${formState.name.trim()}" atualizado com sucesso.`);
         closeForm();
         void loadClients(page, status, appliedSearch);
       } catch (error) {
@@ -298,7 +299,7 @@ export function ClientsView({ session, onUnauthorized, onOpenMaterials }: Client
       const controller = new AbortController();
       try {
         await api.createClient(validation.data, controller.signal, onUnauthorized);
-        setNoticeMessage(`Cliente "${formState.name.trim()}" cadastrado com sucesso.`);
+        showToast(`Cliente "${formState.name.trim()}" cadastrado com sucesso.`);
         closeForm();
         if (page !== 1) {
           setPage(1);
@@ -355,7 +356,7 @@ export function ClientsView({ session, onUnauthorized, onOpenMaterials }: Client
     const controller = new AbortController();
     try {
       await api.archiveClient(clientToArchive.id, clientToArchive.version, controller.signal, onUnauthorized);
-      setNoticeMessage(`Cliente "${clientToArchive.name}" arquivado com sucesso.`);
+      showToast(`Cliente "${clientToArchive.name}" arquivado com sucesso.`);
       setClientToArchive(null);
       void loadClients(page, status, appliedSearch);
     } catch (error) {
@@ -377,7 +378,7 @@ export function ClientsView({ session, onUnauthorized, onOpenMaterials }: Client
     const controller = new AbortController();
     try {
       await api.restoreClient(client.id, client.version, controller.signal, onUnauthorized);
-      setNoticeMessage(`Cliente "${client.name}" restaurado com sucesso.`);
+      showToast(`Cliente "${client.name}" restaurado com sucesso.`);
       void loadClients(page, status, appliedSearch);
     } catch (error) {
       if (error instanceof ApiError && error.code === 'CLIENT_VERSION_CONFLICT') {

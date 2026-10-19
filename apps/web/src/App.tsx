@@ -3,6 +3,8 @@ import type { SessionResponse } from '@orium/contracts';
 import { api, ApiError } from './api.js';
 import { Header } from './components/Header.js';
 import { LoginView } from './components/LoginView.js';
+import { ToastHost } from './components/Toasts.js';
+import { NavIcon } from './components/NavIcon.js';
 import { ClientsView } from './components/ClientsView.js';
 import { DashboardView } from './components/DashboardView.js';
 import { DemandsView } from './components/DemandsView.js';
@@ -475,6 +477,8 @@ export function App() {
         )}
       </main>
 
+      <ToastHost />
+
       {/* Barra Inferior Mobile Nativa (Fase 8 — Aplicativo Interno) */}
       <nav className="mobile-bottom-nav" aria-label="Navegação rápida mobile">
         {hasDemandsRead && hasTasksRead && (
@@ -482,8 +486,9 @@ export function App() {
             type="button"
             className={`mobile-bottom-tab ${activeTab === 'mobile' ? 'active' : ''}`}
             onClick={() => selectTab('mobile')}
+            aria-current={activeTab === 'mobile' ? 'page' : undefined}
           >
-            <span className="mobile-bottom-icon">⚡</span>
+            <span className="mobile-bottom-icon"><NavIcon name="today" /></span>
             <span>Meu Dia</span>
           </button>
         )}
@@ -492,8 +497,9 @@ export function App() {
             type="button"
             className={`mobile-bottom-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
             onClick={() => selectTab('dashboard')}
+            aria-current={activeTab === 'dashboard' ? 'page' : undefined}
           >
-            <span className="mobile-bottom-icon">📊</span>
+            <span className="mobile-bottom-icon"><NavIcon name="dashboard" /></span>
             <span>Painel</span>
           </button>
         )}
@@ -502,8 +508,9 @@ export function App() {
             type="button"
             className={`mobile-bottom-tab ${activeTab === 'demands' ? 'active' : ''}`}
             onClick={() => selectTab('demands')}
+            aria-current={activeTab === 'demands' ? 'page' : undefined}
           >
-            <span className="mobile-bottom-icon">📋</span>
+            <span className="mobile-bottom-icon"><NavIcon name="demands" /></span>
             <span>Demandas</span>
           </button>
         )}
@@ -512,8 +519,9 @@ export function App() {
             type="button"
             className={`mobile-bottom-tab ${activeTab === 'clients' ? 'active' : ''}`}
             onClick={() => selectTab('clients')}
+            aria-current={activeTab === 'clients' ? 'page' : undefined}
           >
-            <span className="mobile-bottom-icon">🏢</span>
+            <span className="mobile-bottom-icon"><NavIcon name="clients" /></span>
             <span>Clientes</span>
           </button>
         )}
@@ -522,9 +530,16 @@ export function App() {
             type="button"
             className={`mobile-bottom-tab ${activeTab === 'notifications' ? 'active' : ''}`}
             onClick={() => selectTab('notifications')}
+            aria-current={activeTab === 'notifications' ? 'page' : undefined}
+            aria-label={
+              typeof unreadCount === 'number' && unreadCount > 0 ? `Alertas, ${unreadCount} não lidos` : undefined
+            }
           >
             <span className="mobile-bottom-icon">
-              🔔{typeof unreadCount === 'number' && unreadCount > 0 ? `(${unreadCount})` : ''}
+              <NavIcon name="alerts" />
+              {typeof unreadCount === 'number' && unreadCount > 0 && (
+                <span className="mobile-bottom-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
+              )}
             </span>
             <span>Alertas</span>
           </button>

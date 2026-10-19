@@ -8,6 +8,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { api, ApiError } from '../api.js';
+import { showToast } from './Toasts.js';
 import type {
   ClientTimelineEvent,
   CreateMaterialInput,
@@ -822,7 +823,7 @@ export function MaterialsView({
           onUnauthorized,
         );
 
-        setNoticeMessage(`Material "${updated.title}" atualizado com sucesso!`);
+        showToast(`Material "${updated.title}" atualizado com sucesso!`);
         closeForm();
         void loadMaterials(
           page,
@@ -851,7 +852,7 @@ export function MaterialsView({
           onUnauthorized,
         );
 
-        setNoticeMessage(`Material "${created.title}" cadastrado com sucesso!`);
+        showToast(`Material "${created.title}" cadastrado com sucesso!`);
         closeForm();
         setPage(1);
         void loadMaterials(
@@ -1001,7 +1002,7 @@ export function MaterialsView({
         controller.signal,
         onUnauthorized,
       );
-      setNoticeMessage(`Material "${archived.title}" arquivado com sucesso.`);
+      showToast(`Material "${archived.title}" arquivado com sucesso.`);
       closeArchiveConfirm();
       void loadMaterials(
         page,
@@ -1043,7 +1044,7 @@ export function MaterialsView({
         controller.signal,
         onUnauthorized,
       );
-      setNoticeMessage(`Material "${restored.title}" restaurado com sucesso.`);
+      showToast(`Material "${restored.title}" restaurado com sucesso.`);
       void loadMaterials(
         page,
         statusFilter,

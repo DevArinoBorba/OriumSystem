@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { createUserSchema, type Role, type SessionResponse } from '@orium/contracts';
 import { api, ApiError } from '../api.js';
+import { showToast } from './Toasts.js';
 import type { UserListItem } from '../types.js';
 import { PasswordVisibilityButton } from './PasswordVisibilityButton.js';
 
@@ -186,7 +187,7 @@ export function TeamView({ session, onUnauthorized }: TeamViewProps) {
 
     try {
       await api.createUser(validation.data, controller.signal, onUnauthorized);
-      setNoticeMessage(`Usuário "${newName.trim()}" cadastrado com sucesso.`);
+      showToast(`Usuário "${newName.trim()}" cadastrado com sucesso.`);
       closeCreatePanel();
       void loadUsers();
     } catch (error) {
@@ -215,7 +216,7 @@ export function TeamView({ session, onUnauthorized }: TeamViewProps) {
     const controller = new AbortController();
     try {
       await api.deactivateUser(userToDeactivate.id, controller.signal, onUnauthorized);
-      setNoticeMessage(`Usuário "${userToDeactivate.name}" desativado com sucesso.`);
+      showToast(`Usuário "${userToDeactivate.name}" desativado com sucesso.`);
       setUserToDeactivate(null);
       void loadUsers();
     } catch (error) {

@@ -7,6 +7,7 @@ import type {
   TaskComment,
 } from '@orium/contracts';
 import { api, ApiError } from '../api.js';
+import { showToast } from './Toasts.js';
 import { DeadlineDate } from './DeadlineDate.js';
 import type { UserListItem } from '../types.js';
 
@@ -146,7 +147,6 @@ export function TaskDetailView({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [conflictMessage, setConflictMessage] = useState<string | null>(null);
 
   // Single-flight ref guard
@@ -278,11 +278,10 @@ export function TaskDetailView({
     isActionBusyRef.current = true;
     setBusy(true);
     setActionError(null);
-    setActionNotice(null);
 
     try {
       await actionFn();
-      setActionNotice(successMessage);
+      showToast(successMessage);
       setConflictMessage(null);
       await loadData();
       onChanged();
@@ -680,12 +679,6 @@ export function TaskDetailView({
       </header>
 
       {/* Global Alerts / Notices */}
-      {actionNotice && (
-        <div className="notice" role="status" style={{ marginBottom: '16px' }}>
-          <p>{actionNotice}</p>
-        </div>
-      )}
-
       {actionError && (
         <div className="error" role="alert" style={{ marginBottom: '16px' }}>
           <p>{actionError}</p>
