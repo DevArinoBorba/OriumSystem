@@ -14,6 +14,8 @@ interface ClientsViewProps {
   session: SessionResponse;
   onUnauthorized: () => void;
   onOpenMaterials?: (target: { clientId: string }) => void;
+  /** Busca já aplicada ao abrir (ex.: cliente escolhido na busca global). */
+  initialSearch?: string;
 }
 
 const emptyForm: ClientFormState = {
@@ -24,7 +26,7 @@ const emptyForm: ClientFormState = {
   notes: '',
 };
 
-export function ClientsView({ session, onUnauthorized, onOpenMaterials }: ClientsViewProps) {
+export function ClientsView({ session, onUnauthorized, onOpenMaterials, initialSearch = '' }: ClientsViewProps) {
   const hasWrite = session.permissions.includes('clients.write');
   const hasArchive = session.permissions.includes('clients.archive');
   const hasMaterialsRead = session.permissions.includes('materials.read');
@@ -35,8 +37,8 @@ export function ClientsView({ session, onUnauthorized, onOpenMaterials }: Client
   const [page, setPage] = useState(1);
   const pageSize = 10;
   const [status, setStatus] = useState<ClientsFilterStatus>('active');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [appliedSearch, setAppliedSearch] = useState('');
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
+  const [appliedSearch, setAppliedSearch] = useState(initialSearch);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
 

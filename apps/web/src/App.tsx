@@ -5,6 +5,8 @@ import { Header } from './components/Header.js';
 import { LoginView } from './components/LoginView.js';
 import { ToastHost } from './components/Toasts.js';
 import { NavIcon } from './components/NavIcon.js';
+import { CommandPalette } from './components/CommandPalette.js';
+import type { PaletteTab, PaletteTarget } from './components/CommandPalette.js';
 import { ClientsView } from './components/ClientsView.js';
 import { DashboardView } from './components/DashboardView.js';
 import { DemandsView } from './components/DemandsView.js';
@@ -59,6 +61,20 @@ function canAccessTab(tab: ActiveTab, session: SessionResponse): boolean {
   }
 }
 
+const tabLabels: Record<ActiveTab, string> = {
+  dashboard: 'Painel',
+  mobile: 'Meu Dia',
+  clients: 'Clientes',
+  demands: 'Demandas',
+  reports: 'Relatórios',
+  materials: 'Materiais',
+  notifications: 'Notificações',
+  team: 'Equipe',
+  vault: 'Cofre & Hermes',
+  backups: 'Backups',
+  profile: 'Meu perfil',
+};
+
 function initialTabFor(permissions: string[]): ActiveTab {
   if (permissions.includes('demands.read') && permissions.includes('tasks.read')) {
     return 'dashboard';
@@ -82,6 +98,9 @@ export function App() {
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [route, setRoute] = useState<AppRoute>({ tab: 'clients', demandId: null, taskId: null });
   const activeTab = route.tab;
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  // nonce força remontar Clientes quando o mesmo cliente é escolhido de novo na busca global
+  const [clientSearch, setClientSearch] = useState<{ name: string; nonce: number }>({ name: '', nonce: 0 });
   const [materialNavTarget, setMaterialNavTarget] = useState<MaterialNavigationTarget | null>(null);
   const [unreadCount, setUnreadCount] = useState<number | null>(null);
   const [busySignOut, setBusySignOut] = useState(false);
@@ -186,6 +205,34 @@ export function App() {
     navigator.serviceWorker.addEventListener('message', onMessage);
     return () => navigator.serviceWorker.removeEventListener('message', onMessage);
   }, [view, session, navigate]);
+
+  // Atalho Ctrl+K / Cmd+K para a busca global.
+  useEffect(() => {
+    if (view !== 'signed-in') return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [view]);
+
+  const handlePaletteSelect = useCallback(
+    (target: PaletteTarget) => {
+      setPaletteOpen(false);
+      if (target.kind === 'tab') {
+        selectTab(target.tab);
+      } else if (target.kind === 'demand') {
+        navigate({ tab: 'demands', demandId: target.demandId, taskId: null });
+      } else {
+        setClientSearch((prev) => ({ name: target.name, nonce: prev.nonce + 1 }));
+        selectTab('clients');
+      }
+    },
+    [navigate, selectTab],
+  );
 
   const handleOpenItem = useCallback(
     (target: DemandNavigationTarget) =>
@@ -359,6 +406,9 @@ export function App() {
   const hasTasksRead = session.permissions.includes('tasks.read');
   const hasMaterialsRead = session.permissions.includes('materials.read');
   const hasNotificationsRead = hasDemandsRead && hasTasksRead;
+  const paletteTabs: PaletteTab[] = (Object.keys(tabLabels) as ActiveTab[])
+    .filter((tab) => canAccessTab(tab, session))
+    .map((tab) => ({ tab, label: tabLabels[tab] }));
 
   return (
     <div className="app-layout">
@@ -369,7 +419,18 @@ export function App() {
         onSignOut={() => void handleSignOut()}
         busy={busySignOut}
         unreadCount={unreadCount}
+        onOpenSearch={() => setPaletteOpen(true)}
       />
+
+      {paletteOpen && (
+        <CommandPalette
+          session={session}
+          tabs={paletteTabs}
+          onSelect={handlePaletteSelect}
+          onClose={() => setPaletteOpen(false)}
+          onUnauthorized={handleUnauthorized}
+        />
+      )}
 
       <main className="main-content">
         {signOutError && (
@@ -407,9 +468,11 @@ export function App() {
 
         {activeTab === 'clients' && hasClientsRead && (
           <ClientsView
+            key={clientSearch.nonce}
             session={session}
             onUnauthorized={handleUnauthorized}
             onOpenMaterials={handleOpenMaterials}
+            initialSearch={clientSearch.name}
           />
         )}
 
