@@ -227,6 +227,18 @@
       "targetSchemaVersion": "0007_phase2a_clients_scope_team.sql",
       "filesCount": 75,
       "bundleDir": "releases/release-20261015143007-a85eafcf38f6/bundle"
+    },
+    {
+      "releaseId": "release-20261019181543-084573a59ee8",
+      "version": "0.1.0",
+      "createdAt": "2026-10-19T18:15:43.484Z",
+      "targetEnvironment": "production",
+      "appImage": "orium-production",
+      "gitCommit": "60105293488b5cdcab145d8b539634c792c6b412",
+      "sourceTreeSHA256": "084573a59ee8e34b52e6dbce4336db1fdedbadd011cb1bdf676e6b72072b439c",
+      "targetSchemaVersion": "0007_phase2a_clients_scope_team.sql",
+      "filesCount": 87,
+      "bundleDir": "releases/release-20261019181543-084573a59ee8/bundle"
     }
   ]
 }
