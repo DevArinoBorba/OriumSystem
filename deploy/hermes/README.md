@@ -7,9 +7,10 @@ Estes são os arquivos dele que tocam o sistema; a fonte da verdade passa a ser 
 |---|---|---|
 | `orium-agent` | `/usr/local/bin/orium-agent` | Escritas e buscas via `node dist/cli.js agent` no container da API — mesmas regras, permissões, notificações e auditoria do app (`apps/api/src/agent.ts`). |
 | `orium-hermes-query` | `/usr/local/bin/orium-hermes-query` | Somente leitura (resumos) e cofre. As escritas antigas por SQL direto foram desativadas. |
-| `orium-drive-upload` | `/usr/local/bin/orium-drive-upload` | Upload ao Google Drive. Lê mídias de `~/.hermes/cache/images`; caminho inexistente agora é erro (antes enviava outro arquivo). |
+| `orium-drive-upload` | `/usr/local/bin/orium-drive-upload` | Upload ao Google Drive em lote: só as 6 pastas padrão + subpasta do lote, nomes `AAAA-MM-DD_assunto_NN`, bloqueio de repetidos por MD5 em toda a pasta do cliente, nunca sobrescreve, link privado por ID (sem `rclone link` público). |
 | `orium-vault-sync` | `/usr/local/bin/orium-vault-sync` | Sincroniza clientes/demandas com o Obsidian (cron a cada 15 min). |
 | `skills/orium-secretary/SKILL.md` | `/root/.hermes/skills/orium-secretary/SKILL.md` | **Manual de operação** que o agente segue. |
+| `skills/orium-drive/SKILL.md` | `/root/.hermes/skills/orium-drive/SKILL.md` | Padrão de organização do Google Drive (pastas, nomes, lotes, repetidos, vínculo como material). |
 | `SOUL.md` | `/root/.hermes/SOUL.md` | Identidade e regras-base, apontando para o manual. |
 
 ## Instalação / atualização

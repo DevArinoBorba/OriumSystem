@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import datetime
+import hashlib
 import json
 import os
 import re
@@ -99,7 +100,8 @@ def list_remote_clients() -> list[str]:
         return []
     return [line.strip().rstrip("/") for line in res.stdout.splitlines() if line.strip()]
 
-def resolve_client_name(raw_client: str, existing_clients: list[str]) -> str:
+def resolve_client_name(raw_client: str, existing_clients: list[str]) -> str | None:
+    """Alias, nome exato ou única pasta que contém o termo. Ambíguo/desconhecido -> None (nunca inventa pasta)."""
     cleaned = clean_name(raw_client)
     low = cleaned.lower()
     if low in CLIENT_ALIASES:
@@ -107,26 +109,16 @@ def resolve_client_name(raw_client: str, existing_clients: list[str]) -> str:
     for ex in existing_clients:
         if ex.lower() == low:
             return ex
-    for ex in existing_clients:
-        if low in ex.lower() or ex.lower() in low:
-            return ex
-    # Check first word match (e.g. "Gordinho ..." -> "Gordinho Locacoes")
-    first_word = low.split()[0] if low.split() else ""
-    if len(first_word) >= 4:
-        matches = [ex for ex in existing_clients if first_word in ex.lower().split()]
-        if len(matches) == 1:
-            return matches[0]
-    return cleaned or "_Orium Interno"
+    partial = [ex for ex in existing_clients if low and (low in ex.lower() or ex.lower() in low)]
+    return partial[0] if len(partial) == 1 else None
 
-def resolve_category(raw_cat: str) -> str:
-    cleaned = clean_name(raw_cat)
-    low = cleaned.lower()
-    if low in CATEGORY_MAP:
-        return CATEGORY_MAP[low]
-    for k, v in CATEGORY_MAP.items():
-        if k in low:
-            return v
-    return cleaned if cleaned else "Comprovantes"
+def resolve_category(raw_cat: str) -> str | None:
+    """Somente as 6 pastas padrão (ou sinônimos do CATEGORY_MAP). Desconhecida -> None."""
+    low = clean_name(raw_cat).lower()
+    for sub in STANDARD_SUBFOLDERS:
+        if sub.lower() == low:
+            return sub
+    return CATEGORY_MAP.get(low)
 
 def ensure_client_structure(client_name: str) -> None:
     for sub in STANDARD_SUBFOLDERS:
@@ -146,6 +138,8 @@ def schedule_local_cleanup(file_path: Path) -> None:
     try:
         resolved = str(file_path.resolve())
         allowed_prefixes = (
+            "/root/.hermes/cache/images/",
+            "/root/.hermes/cache/documents/",
             "/root/.hermes/image_cache/",
             "/root/.hermes/document_cache/",
             "/root/.hermes/audio_cache/",
@@ -200,19 +194,58 @@ def find_latest_cached_media() -> Path | None:
         return newest
     return None
 
+def slugify(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", strip_accents(text).lower()).strip("-")
+
+def md5_file(path: Path) -> str:
+    h = hashlib.md5()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+def remote_md5_index(client_name: str) -> dict[str, str]:
+    """md5 -> caminho relativo de TODOS os arquivos do cliente no Drive (para não salvar repetidos)."""
+    res = run_rclone(["md5sum", f"{RCLONE_REMOTE}/{client_name}"], check=False)
+    index: dict[str, str] = {}
+    for line in res.stdout.splitlines():
+        parts = line.split("  ", 1)
+        if len(parts) == 2 and len(parts[0]) == 32:
+            index.setdefault(parts[0], parts[1].strip())
+    return index
+
+def remote_names(remote_dir: str) -> set[str]:
+    res = run_rclone(["lsf", "--files-only", remote_dir], check=False)
+    return {line.strip() for line in res.stdout.splitlines() if line.strip()}
+
+def drive_url(remote_path: str) -> str:
+    """Link pelo ID do arquivo: abre para quem já tem acesso ao Drive, sem torná-lo público."""
+    res = run_rclone(["lsjson", "--stat", remote_path], check=False)
+    try:
+        file_id = json.loads(res.stdout).get("ID")
+    except Exception:
+        file_id = None
+    return f"https://drive.google.com/file/d/{file_id}/view" if file_id else ""
+
+def fail(message: str, **extra) -> None:
+    print(json.dumps({"ok": False, "error": message, **extra}, ensure_ascii=False, indent=2))
+    sys.exit(1)
+
 def main():
-    parser = argparse.ArgumentParser(description="Upload files from Orium Agent to Google Drive (Agent/<Cliente>/<Categoria>/)")
-    parser.add_argument("file", nargs="?", help="Local file path (or 'latest' to auto-select the most recent WhatsApp attachment)")
-    parser.add_argument("--client", "-c", default="", help="Client name (e.g. 'Gordinho Locacoes')")
-    parser.add_argument("--category", "-k", default="Comprovantes", help="Category folder (Comprovantes, Contratos, Identidade Visual, Criativos e Midias, Relatorios, Documentos Gerais)")
-    parser.add_argument("--name", "-n", default="", help="Optional custom filename on Google Drive")
-    parser.add_argument("--init-clients", nargs="*", help="Initialize standard folder tree for the given clients")
-    parser.add_argument("--list", "-l", nargs="?", const="", help="List folders/files in Google Drive Agent folder")
+    parser = argparse.ArgumentParser(description="Upload de arquivos do Orium Agent para o Google Drive (Agent/<Cliente>/<Categoria>/[<Pasta>]/)")
+    parser.add_argument("files", nargs="*", help="Caminhos exatos dos arquivos (um ou vários, na ordem desejada)")
+    parser.add_argument("--client", "-c", default="", help="Nome do cliente igual ao da pasta no Drive (ex.: 'Gordinho Locacoes')")
+    parser.add_argument("--category", "-k", default="", help="Uma das 6 pastas: " + ", ".join(STANDARD_SUBFOLDERS))
+    parser.add_argument("--folder", "-f", default="", help="Subpasta do lote (ex.: '2026-10 Anuncios do site')")
+    parser.add_argument("--name", "-n", default="", help="Assunto curto para o nome do arquivo (ex.: 'anuncios-site')")
+    parser.add_argument("--init-clients", nargs="*", help="Cria a árvore padrão de pastas para os clientes informados")
+    parser.add_argument("--list", "-l", nargs="?", const="", help="Lista pastas/arquivos do Drive (Agent/ ou Agent/<Cliente>)")
     args = parser.parse_args()
 
     if args.init_clients is not None:
-        clients = args.init_clients or ["Gordinho Locacoes", "Loja BlackShark", "Marcio Sandim", "SoluCell", "_Orium Interno"]
-        init_all_clients(clients)
+        if not args.init_clients:
+            fail("Informe o nome do cliente em --init-clients \"<Cliente>\".")
+        init_all_clients(args.init_clients)
         return
 
     if args.list is not None:
@@ -221,74 +254,86 @@ def main():
         print(res.stdout if res.returncode == 0 else res.stderr)
         return
 
-    local_path = None
-    if not args.file or args.file.lower() in ("latest", "auto", "ultimo"):
-        local_path = find_latest_cached_media()
-        if not local_path:
-            print(json.dumps({"ok": False, "error": "Nenhum arquivo recebido nos ultimos 15 minutos. Use o caminho exato informado em [User sent an image: ...]."}, ensure_ascii=False))
-            sys.exit(1)
-    else:
-        local_path = Path(args.file)
-        if not local_path.exists():
+    if not args.files:
+        fail("Informe os caminhos exatos dos arquivos (os de [User sent an image: ...]).")
+    paths: list[Path] = []
+    for raw in args.files:
+        if raw.lower() in ("latest", "auto", "ultimo"):
+            latest = find_latest_cached_media()
+            if not latest or len(args.files) > 1:
+                fail("'latest' só vale para um único arquivo recente. Use os caminhos exatos.")
+            paths.append(latest)
+            continue
+        path = Path(raw)
+        if not path.is_file():
             # Nunca trocar por outro arquivo: enviar a mídia errada é pior que falhar.
-            print(json.dumps({"ok": False, "error": f"Arquivo local nao encontrado: {args.file}. Use o caminho exato informado em [User sent an image: ...]."}, ensure_ascii=False))
-            sys.exit(1)
+            fail(f"Arquivo local nao encontrado: {raw}. Use o caminho exato informado em [User sent an image: ...].")
+        paths.append(path)
 
     existing_clients = list_remote_clients()
-    client_name = resolve_client_name(args.client or "_Orium Interno", existing_clients)
+    client_name = resolve_client_name(args.client, existing_clients) if args.client else None
+    if not client_name:
+        fail("Cliente não encontrado no Drive (ou ambíguo). Confirme o nome com o usuário; cliente novo exige --init-clients.",
+             existing_clients=existing_clients)
     category_name = resolve_category(args.category)
+    if not category_name:
+        fail("Categoria inválida. Use uma das pastas padrão.", categories=STANDARD_SUBFOLDERS)
+    ensure_client_structure(client_name)
 
-    # Ensure client has all standard folders if new
-    if client_name not in existing_clients:
-        ensure_client_structure(client_name)
+    rel_dir = f"{client_name}/{category_name}" + (f"/{clean_name(args.folder)}" if args.folder.strip() else "")
+    remote_dir = f"{RCLONE_REMOTE}/{rel_dir}"
+    known = remote_md5_index(client_name)
+    taken = remote_names(remote_dir)
+    today = datetime.datetime.now().strftime("%Y-%m-%d")
+    slug = slugify(args.name)
+    numbered = len(paths) > 1
+    seq = 0
+    if slug:
+        seq_re = re.compile(rf"^{re.escape(today)}_{re.escape(slug)}_(\d+)\.")
+        seq = max([int(m.group(1)) for m in (seq_re.match(n) for n in taken) if m] or [0])
 
-    ext = local_path.suffix.lower() or ".jpg"
-    today_prefix = datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S")
-    if args.name:
-        custom = clean_name(args.name)
-        if not custom.lower().endswith(ext):
-            custom = f"{custom}{ext}"
-        if not re.match(r"^\d{4}-\d{2}-\d{2}", custom):
-            dest_filename = f"{ datetime.datetime.now().strftime('%Y-%m-%d') }_{custom.replace(' ', '_')}"
+    uploaded, duplicates = [], []
+    for path in paths:
+        try:
+            digest = md5_file(path)
+        except OSError:
+            fail(f"Arquivo local indisponivel: {path}. Nada foi enviado para ele.",
+                 uploaded_before_failure=uploaded, duplicates=duplicates)
+        if digest in known:
+            existing = known[digest]
+            duplicates.append({"local": str(path), "already_in_drive": f"Agent/{client_name}/{existing}",
+                               "drive_url": drive_url(f"{RCLONE_REMOTE}/{client_name}/{existing}")})
+            schedule_local_cleanup(path)
+            continue
+        ext = path.suffix.lower() or ".jpg"
+        if slug:
+            seq += 1
+            base = f"{today}_{slug}_{seq:02d}" if numbered or seq > 1 else f"{today}_{slug}"
         else:
-            dest_filename = custom.replace(" ", "_")
-    else:
-        orig_stem = local_path.stem
-        # Strip img_xxx_ or doc_xxx_ cache prefix if present
-        parts = orig_stem.split("_", 2)
-        clean_stem = parts[2] if (len(parts) >= 3 and parts[0] in ("img", "doc", "aud")) else orig_stem
-        clean_stem = re.sub(r"[^A-Za-z0-9_-]+", "_", strip_accents(clean_stem)).strip("_") or "arquivo"
-        dest_filename = f"{today_prefix}_{clean_stem}{ext}"
+            stem = path.stem.split("_", 2)
+            stem = stem[2] if len(stem) >= 3 and stem[0] in ("img", "doc", "aud") else path.stem
+            base = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H%M%S')}_{slugify(stem) or 'arquivo'}"
+        dest_name, n = f"{base}{ext}", 2
+        while dest_name in taken:  # nunca sobrescrever
+            dest_name, n = f"{base}-{n}{ext}", n + 1
+        res = run_rclone(["copyto", str(path), f"{remote_dir}/{dest_name}"], check=False)
+        if res.returncode != 0:
+            fail("Falha no envio ao Drive; nada foi confirmado para este arquivo.", local=str(path),
+                 uploaded_before_failure=uploaded, duplicates=duplicates)
+        taken.add(dest_name)
+        known[digest] = f"{rel_dir.split('/', 1)[1]}/{dest_name}"
+        rel_path = f"Agent/{rel_dir}/{dest_name}"
+        uploaded.append({"local": str(path), "file_name": dest_name, "drive_path": rel_path,
+                         "drive_url": drive_url(f"{remote_dir}/{dest_name}")})
+        log_to_obsidian(client_name, category_name, dest_name, rel_path)
+        schedule_local_cleanup(path)
 
-    drive_rel_path = f"Agent/{client_name}/{category_name}/{dest_filename}"
-    rclone_dest = f"drive_dest:{drive_rel_path}"
-
-    res = run_rclone(["copyto", str(local_path), rclone_dest], check=False)
-    if res.returncode != 0:
-        print(json.dumps({
-            "ok": False,
-            "error": res.stderr.strip() or "Falha no rclone copyto",
-            "local_path": str(local_path),
-        }, ensure_ascii=False))
-        sys.exit(1)
-
-    # Get shareable link if possible (best-effort)
-    link_res = run_rclone(["link", rclone_dest], check=False)
-    drive_link = link_res.stdout.strip() if link_res.returncode == 0 else ""
-
-    # Log to Obsidian Vault and schedule deletion of local VPS cache file
-    log_to_obsidian(client_name, category_name, dest_filename, drive_rel_path)
-    schedule_local_cleanup(local_path)
-
-    print(json.dumps({
-        "ok": True,
-        "client": client_name,
-        "category": category_name,
-        "file_name": dest_filename,
-        "drive_path": drive_rel_path,
-        "drive_link": drive_link,
-        "vps_cache_cleanup": "scheduled_45s (0 bytes permanent on VPS)",
-    }, ensure_ascii=False, indent=2))
+    result = {"ok": True, "client": client_name, "category": category_name, "folder": f"Agent/{rel_dir}",
+              "uploaded": uploaded, "duplicates_skipped": duplicates}
+    if len(uploaded) == 1 and not duplicates:  # compatibilidade com o formato antigo
+        result.update({"file_name": uploaded[0]["file_name"], "drive_path": uploaded[0]["drive_path"],
+                       "drive_link": uploaded[0]["drive_url"]})
+    print(json.dumps(result, ensure_ascii=False, indent=2))
 
 if __name__ == "__main__":
     main()

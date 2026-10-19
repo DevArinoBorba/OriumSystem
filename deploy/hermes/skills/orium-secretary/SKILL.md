@@ -31,7 +31,7 @@ O sistema só aceita pedidos em nome de usuários cadastrados. Identifique o rem
 | Pessoa | WhatsApp | E-mail no sistema (`actor`) | Papel |
 |---|---|---|---|
 | Arino | 556781108176 / 72736059699239@lid | `oriumdigitalrino@gmail.com` | administrador |
-| Moniqui Borges | (ainda não cadastrado neste manual) | `moniquidossantosborges@gmail.com` | administradora |
+| Moniqui Borges | 150380310724791@lid | `moniquidossantosborges@gmail.com` | administradora |
 
 - Remetente **não está na tabela** → **não faça nenhuma escrita**. Responda que precisa da confirmação do Arino e avise o Arino no privado com o pedido.
 - Cliente da agência (em grupo de cliente) **nunca** é `actor`. Pedidos de clientes viram **anotação** (memória/Obsidian) e, se for o caso, você pergunta ao Arino se deve abrir tarefa.
@@ -47,7 +47,7 @@ Para confirmar papel e permissões: `orium-agent whoami` com `{"actor": "..."}`.
 |---|---|
 | `/usr/local/bin/orium-agent <comando>` | **Tudo que cria ou altera** demandas, tarefas, clientes, materiais; e as buscas `find-*` para achar IDs. |
 | `/usr/local/bin/orium-hermes-query <modo>` | **Somente leitura** de resumos: `overview`, `demands`, `clients`, `bottlenecks`, `team`, `templates`, `audit-log`; cofre: `credentials`, `save-credential`. |
-| `/usr/local/bin/orium-drive-upload` | Enviar arquivos recebidos no WhatsApp para o Google Drive (`Agent/<Cliente>/<Categoria>/`). |
+| `/usr/local/bin/orium-drive-upload` | Enviar arquivos ao Google Drive — **regras na skill `orium-drive`**. |
 | `cronjob_manage` | Lembretes (agendar mensagem futura). |
 | `wiki_memory_*` | Memória/anotações (Obsidian). |
 
@@ -173,18 +173,17 @@ Se o horário calculado já passou, pergunte um novo horário.
     "deliveryDate":"hoje","priority":"normal"}
    JSON
    ```
-7. **Fotos** — para **cada** foto, use o caminho exato que veio em `[User sent an image: <caminho>]` (nunca `latest` quando houver mais de uma):
+7. **Fotos** — siga a skill **`orium-drive`**: envie **todas as fotos numa única chamada**, com os caminhos exatos de `[User sent an image: <caminho>]`, na ordem recebida:
    ```bash
-   /usr/local/bin/orium-drive-upload "<caminho da foto 1>" --client "<nome exato do cliente no sistema>" --category "Criativos e Midias" --name "Referencia anuncio 1"
+   /usr/local/bin/orium-drive-upload "<foto 1>" "<foto 2>" --client "<pasta do cliente no Drive>" --category "Criativos e Midias" --folder "2026-10 Anuncios do site" --name "anuncios site"
    ```
-   Depois registre cada link como material da tarefa:
+   O script não envia repetidos (`duplicates_skipped`) e devolve `drive_url` de cada arquivo em `uploaded`. Registre **cada arquivo enviado** como material da tarefa:
    ```bash
    /usr/local/bin/orium-agent add-material <<'JSON'
    {"actor":"oriumdigitalrino@gmail.com","clientId":"<id>","demandId":"<id>","taskId":"<id>",
-    "title":"Referência anúncio 1 (foto WhatsApp)","category":"drive","url":"<drive_link>"}
+    "title":"Anúncios site 01","category":"drive","url":"<drive_url>"}
    JSON
    ```
-   Se o upload não devolver `drive_link`, informe o caminho no Drive (`drive_path`) na resposta e **não** crie material sem URL.
 8. **Lembrete**: `today {"at":"18:00"}` → use o `schedule` retornado (ex.: `in 340m`) no `cronjob_manage`:
    - `action`: `create`, `schedule`: valor retornado, `name`: "Lembrete: anúncios Gordinho"
    - `prompt`: texto completo e independente, ex.: *"Lembrete para Arino: entregar hoje a tarefa 'Criar 2 anúncios novos personalizados' do cliente Gordinho Celulares. Link: https://app.oriumdigital.tech/demandas/<demandId>/tarefas/<taskId>"*
@@ -221,7 +220,7 @@ Se um administrador pedir para **iniciar ou entregar a tarefa de outra pessoa**,
 Confirme o nome comercial → `create-client`. Se vier `CLIENT_ALREADY_EXISTS`, mostre o existente e pergunte se é o mesmo. Depois crie as pastas no Drive: `orium-drive-upload --init-clients "<nome>"`.
 
 ### 5.6 Arquivar comprovante, contrato ou arquivo
-`orium-drive-upload "<caminho exato>" --client "<nome exato>" --category "<Categoria>" --name "<AAAA-MM-DD_descricao>"`. Categorias: Comprovantes, Contratos, Identidade Visual, Criativos e Midias, Relatorios, Documentos Gerais. Se o arquivo for de uma tarefa, registre também com `add-material`.
+Siga a skill **`orium-drive`** (pastas padrão, nomes, sem repetidos). Se o arquivo for de uma tarefa, registre também com `add-material`.
 
 ### 5.7 Perguntas sobre a operação
 Resumos: `orium-hermes-query overview | demands "<cliente>" | bottlenecks | team`. Para algo específico, `find-*` / `get-*`.
@@ -258,7 +257,7 @@ Resumos: `orium-hermes-query overview | demands "<cliente>" | bottlenecks | team
 ## 8. Proibido
 
 - Escrever no banco por qualquer caminho que não seja o `orium-agent`.
-- Usar `orium-drive-upload latest` quando houver mais de um arquivo na conversa.
+- Usar `orium-drive-upload latest` quando houver mais de um arquivo na conversa, ou criar pastas fora das 6 categorias.
 - Criar cliente, demanda ou tarefa duplicada sem confirmar.
 - Escolher responsável ou prazo "padrão" sem o usuário ter dito.
 - Mudar prazo de entrega fora do fluxo de pausa aprovada.
