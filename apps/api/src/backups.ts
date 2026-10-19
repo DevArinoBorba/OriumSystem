@@ -149,7 +149,7 @@ function writeManifestAndFreshness(stageDir: string, files: BackupFileItem[]) {
   });
 }
 
-export async function getBackupStatus(_database: Database): Promise<BackupStatusResponse> {
+export async function getBackupStatus(): Promise<BackupStatusResponse> {
   const stageDir = resolveStageDir();
   const rcloneConf = resolveRcloneConfigPath();
   const driveConfigured = Boolean(rcloneConf);
@@ -350,7 +350,7 @@ export async function triggerBackup(database: Database): Promise<TriggerBackupRe
     message = 'Backup local gerado e verificado em modo Dry-Run.';
   }
 
-  const status = await getBackupStatus(database);
+  const status = await getBackupStatus();
 
   return {
     success: true,

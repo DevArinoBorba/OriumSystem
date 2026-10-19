@@ -754,7 +754,7 @@ export async function buildApp({ config, database, logger }: Options) {
     const identity = await authenticate(database, auth, request.headers);
     requirePermission(identity, 'roles.manage');
     if (!identity.roles.includes('administrator')) throw new AppError(403, 'FORBIDDEN');
-    return getBackupStatus(database);
+    return getBackupStatus();
   });
 
   app.post('/api/v1/backups/run', async (request) => {
