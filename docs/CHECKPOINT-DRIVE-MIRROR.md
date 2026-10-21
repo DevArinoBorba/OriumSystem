@@ -1,52 +1,61 @@
-# Checkpoint — Espelho do Google Drive na página Materiais (pausado em 2026-10-19)
+# Espelho do Google Drive na página Materiais — entregue em 2026-10-21
 
-Branch: `feat/drive-mirror` (trabalho em andamento, **não** está na `main` nem em produção).
+Iniciado em 19/10 (checkpoint na branch `feat/drive-mirror`), concluído e publicado em 21/10.
+Commits na `main`: `8817dfa` (backend), `20adc35` (Kanban de outro agente, incluído no deploy), `0bd45cf`, `0af50cc` (frontend, infra, Hermes).
 
-## Objetivo (decisões do responsável)
-- Página Materiais vira espelho da pasta `Agent/` do Google Drive: navegar, ver, baixar.
-- Inclui arquivos colocados direto no Drive (escopo completo, já autorizado).
-- Ações: enviar arquivos pelo sistema, status "a publicar"/"publicado", vincular a tarefa.
-- Acesso:
-  - administradores veem tudo;
-  - colaboradores só os arquivos vinculados às próprias tarefas (ex.: "postar 4 vídeos" → vê os 4 vídeos).
+## O que faz
+- **Materiais › Google Drive (administradores):**
+  - navegação pela pasta `Agent/` inteira, inclusive arquivos colocados à mão no Drive;
+  - miniaturas, visualização de imagem e vídeo, download;
+  - status "a publicar"/"publicado" e filtro "só a publicar";
+  - vincular arquivo a uma tarefa;
+  - envio por botão ou arrastar e soltar, em partes de 4 MB (até 1 GB), sem repetidos (MD5 na pasta do cliente) e com nomes `AAAA-MM-DD_assunto_NN`, só em `Cliente/Categoria[/Lote]`.
+- **Materiais › Meus arquivos (colaboradores):** arquivos vinculados às próprias tarefas abertas, agrupados por tarefa, com download e "Publicado". Arquivos de outras pessoas devolvem 404.
+- **Materiais › Links:** a tela anterior, sem mudanças.
+- **Orium Agent:** `orium-drive-upload` devolve `drive_file_id`/`relative_path`; as skills mandam gravar no `add-material`. O arquivo entra como "a publicar" e aparece para o responsável.
 
-## Feito
-- **Autorização Google (escopo `drive`)** concluída.
-  - Config separada na VPS: `/var/lib/orium-drive/rclone.conf` (700/600), remote `drive_mirror`, `root_folder_id` = pasta `Agent`. Validada: lista os 5 clientes.
-  - `drive_dest` (agente) e a config dos backups não foram alterados.
-- **Migration `0008_drive_mirror.sql`:**
-  - `material.drive_file_id` e `material.drive_path`;
-  - tabela `drive_file_status` (`to_publish`/`published`);
-  - grant em `migrate.ts`.
-- **Contratos:** `drivePathSchema` (bloqueia `..`, `/` inicial, `\`, NUL), `driveEntry`, list/my-files/status/link/upload; `createMaterialSchema` aceita `driveFileId`/`drivePath`.
-- **`apps/api/src/drive.ts`:**
-  - cliente do gateway rclone (`rcd --rc-serve`);
-  - `listDrive` (só admin);
-  - `openDriveFile` (stream com Range; HTML/SVG sempre download);
-  - `setDriveFileStatus`, `linkDriveFile` (vincular cria material e status "a publicar"), `myDriveFiles`;
-  - envio em partes de 4 MB (`receiveUploadChunk`/`completeUpload`, MD5 sem repetidos, nomes `AAAA-MM-DD_assunto_NN`, só pastas `Cliente/Categoria[/Lote]`).
-- **Rotas em `app.ts`** (`/api/v1/drive/list|my-files|file|status|link|upload/chunk|upload/complete`). Exceção de content-type só para `upload/chunk` (octet-stream).
-- **Agente:** `add-material` aceita `driveFileId`/`drivePath`.
-- **Testes:** `tests/drive.integration.test.ts` com Drive falso em memória — **5/5 passando**.
+## Arquitetura
+- `drive-gateway` (rclone 1.68.2 `rcd --rc-serve`):
+  - rede interna `backend` + rede `egress` só dele;
+  - senha em `DRIVE_GATEWAY_PASSWORD` (.env 600);
+  - config `/var/lib/orium-drive/rclone.conf` (escopo `drive`, `root_folder_id` = `Agent`).
+- A API não tem internet nem credenciais do Google. Ela valida acesso e faz o streaming.
+- HTML/SVG nunca abrem inline.
+- Migration `0008_drive_mirror.sql`: `material.drive_file_id`/`drive_path` e `drive_file_status`.
 
-## Falta
-1. Rodar a suíte completa, lint e typecheck da raiz.
-2. **Frontend** da página Materiais:
-   - aba "Google Drive": navegação por pastas, grade com miniaturas, download, status, vincular a tarefa, arrastar e soltar para enviar em partes;
-   - para colaborador: "Meus arquivos" por tarefa, marcar publicado;
-   - manter a aba atual de links.
-3. **Infra:**
-   - serviço `drive-gateway` no `docker-compose.yaml` (imagem `rclone/rclone` com versão fixa, `rcd --rc-serve --rc-addr=:5572 --rc-user/--rc-pass`, volume `/var/lib/orium-drive/rclone.conf` montado com escrita para renovar token, só rede `backend`);
-   - variáveis `DRIVE_GATEWAY_URL/USER/PASSWORD/FS` na API;
-   - nginx: `location /api/v1/drive/` com `proxy_read_timeout` maior e `proxy_buffering off`.
-4. **Hermes:**
-   - skill `orium-drive` passa `driveFileId`/`drivePath` no `add-material`;
-   - o `drive_url` do script já traz o ID.
-5. **Deploy:**
-   - backup, migration 0008 em produção, rebuild `api`/`web` + subir `drive-gateway`;
-   - smoke tests; teste no navegador com admin e colaborador.
+## Evidências
+- **Local:**
+  - lint e typecheck limpos;
+  - **406/406** testes (inclui `tests/drive.integration.test.ts`, com Drive falso que reproduz o formato real do rclone);
+  - build ok;
+  - fase 10: 60/60;
+  - `nginx -t` e `docker compose config` ok.
+- **CI GitHub:** `0af50cc` success.
+- **Portão validado na VPS antes do deploy (container temporário):**
+  - listagem com ID/MD5;
+  - Range 206;
+  - upload;
+  - 404 em pasta inexistente;
+  - 401 sem senha.
+  - Achado corrigido: `Path` recursivo é relativo à raiz do remote.
+- **Produção:**
+  - drift: 17/17 arquivos iguais a `738f8ac` antes; 17/17 iguais a `0af50cc` depois;
+  - migration: exit 0, 9 migrations, colunas e grant ok, 4 usuários e 9 materiais preservados;
+  - containers: `drive-gateway`, `api` (healthy) e `web` no ar; postgres sem reinício;
+  - a API alcança o portão (8 pastas) e continua sem internet;
+  - públicos: ready 200, `/` e `/materiais` 200, rotas `/api/v1/drive/*` 401 sem login, bundle `index-DtQ2rWxx.js`;
+  - listagem real como Arino: lote do Gordinho com 9 arquivos.
+  - Os 9 materiais de 19/10 foram completados com `drive_file_id`/`drive_path` (9/9, transação) e marcados "a publicar".
+- **Hermes:** `orium-drive-upload` e as 2 skills instalados idênticos ao git; gateway `active`.
 
-## Estado do ambiente
-- Produção: commit `738f8ac` (sem espelho). Nada desta branch publicado.
-- Dev local: Postgres (55432/5433), API 3002 e web 5173 ainda rodando (podem ser parados).
-- Pendências antigas: data da demanda de 14/10 (prazo 16/10 vencido) e a 11ª imagem das 11h17.
+## Backups e rollback
+- **Backups:**
+  - `/var/lib/orium-backup/staging/orium_prod_pre_20261021-drive.dump` (107.819 bytes, 234 TOC);
+  - `code_pre_20261021-drive.tar.gz` (arquivos + .env);
+  - `hermes_pre_20261021-drive.tar.gz`;
+  - imagens `orium-production-{api,web}:pre-drive-20261021`.
+- **Rollback:** restaurar os tarballs, retag das imagens, `docker compose up -d --no-build --no-deps --force-recreate api web` e `docker compose rm -sf drive-gateway`. As colunas novas da migration 0008 são aditivas e podem ficar.
+
+## Pendente
+- Conferência visual logada em produção (admin e colaborador).
+- Kanban (`20adc35`): ao arrastar para "Em produção", um administrador inicia tarefas de outra pessoa, o que contorna a regra "só o responsável inicia". Decidir se é intencional.
