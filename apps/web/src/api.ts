@@ -464,6 +464,18 @@ export const api = {
       (raw) => demandResponseSchema.parse(raw),
     ),
 
+  deleteDemand: (
+    id: string,
+    signal: AbortSignal,
+    onUnauthorized: () => void,
+  ): Promise<{ ok: boolean; id: string }> =>
+    request(
+      `/api/v1/demands/${id}`,
+      { method: 'DELETE', signal },
+      onUnauthorized,
+      (raw) => raw as { ok: boolean; id: string },
+    ),
+
   getDemandHistory: (
     id: string,
     signal: AbortSignal,

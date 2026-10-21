@@ -425,12 +425,20 @@ export const demandEventSchema = z.object({
 export type DemandEvent = z.infer<typeof demandEventSchema>;
 
 // Inputs
+export const taskRequirementInputSchema = z.object({
+  title: z.string().trim().min(1).max(160),
+  mandatory: z.boolean().default(true),
+}).strict();
+export type TaskRequirementInput = z.infer<typeof taskRequirementInputSchema>;
+
 export const createDemandSchema = z.object({
   clientId: z.string().uuid(),
   title: z.string().trim().min(1).max(160),
   description: z.string().max(5000).default(''),
   priority: demandPrioritySchema.default('normal'),
   deliveryDate: calendarDateSchema,
+  assignedToUserId: z.string().min(1).optional(),
+  requirements: z.array(taskRequirementInputSchema).max(30).optional(),
 }).strict();
 export type CreateDemandInput = z.infer<typeof createDemandSchema>;
 
@@ -449,12 +457,6 @@ export const completeDemandSchema = z.object({
   version: z.number().int().positive(),
 }).strict();
 export type CompleteDemandInput = z.infer<typeof completeDemandSchema>;
-
-export const taskRequirementInputSchema = z.object({
-  title: z.string().trim().min(1).max(160),
-  mandatory: z.boolean().default(true),
-}).strict();
-export type TaskRequirementInput = z.infer<typeof taskRequirementInputSchema>;
 
 export const createTaskSchema = z.object({
   demandId: z.string().uuid(),

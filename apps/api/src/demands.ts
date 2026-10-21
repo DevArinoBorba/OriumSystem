@@ -419,6 +419,42 @@ export async function createDemand(
       VALUES ($1, $2, NULL, $3, $4, 'demand_created', NULL, $5)
     `, [randomUUID(), id, actor.id, actor.name, JSON.stringify({ priority: input.priority, deliveryDate: input.deliveryDate })], {});
 
+    if (input.assignedToUserId) {
+      const assigneeCheck = await dbClient.query<{ id: string }>(`
+        SELECT id FROM auth_user WHERE id = $1 AND active = true FOR SHARE
+      `, [input.assignedToUserId]);
+      const assigneeId = assigneeCheck.rows[0]?.id ?? actor.id;
+
+      const reqList = input.requirements ?? [];
+      const hasMandatoryRequirements = reqList.some((r) => r.mandatory);
+      const initialTaskStatus: TaskStatus = hasMandatoryRequirements ? 'blocked' : 'ready';
+      const taskId = randomUUID();
+
+      await dbClient.query(`
+        INSERT INTO task (
+          id, demand_id, assigned_to_user_id, title, description, priority, delivery_date,
+          status, ready_at, version
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $8 = 'ready' THEN now() ELSE NULL END, 1)
+      `, [
+        taskId,
+        id,
+        assigneeId,
+        input.title,
+        input.description,
+        input.priority,
+        input.deliveryDate,
+        initialTaskStatus,
+      ]);
+
+      for (const req of reqList) {
+        await dbClient.query(`
+          INSERT INTO task_requirement (id, task_id, title, mandatory, satisfied)
+          VALUES ($1, $2, $3, $4, false)
+        `, [randomUUID(), taskId, req.title, req.mandatory]);
+      }
+    }
+
     await dbClient.query('COMMIT');
     return { demand: safeFormatDemand(insertRes.rows[0], clientRow.name) };
   } catch (err) {
@@ -521,6 +557,24 @@ export async function updateDemand(
     const updatedDemand = updateRes.rows[0];
     if (!updatedDemand) throw new AppError(500, 'DEMAND_UPDATE_FAILED');
 
+    await dbClient.query(`
+      UPDATE task
+      SET title = $2,
+          description = $3,
+          priority = $4,
+          delivery_date = $5,
+          version = version + 1,
+          updated_at = now()
+      WHERE demand_id = $1
+        AND (SELECT count(*) FROM task WHERE demand_id = $1) = 1
+    `, [
+      demandId,
+      updatedDemand.title,
+      updatedDemand.description,
+      updatedDemand.priority,
+      formatDate(updatedDemand.delivery_date),
+    ]);
+
     const clientRes = await dbClient.query<{ name: string }>(`
       SELECT name FROM client WHERE id = $1
     `, [updatedDemand.client_id]);
@@ -585,6 +639,50 @@ export async function completeDemand(
 
     await dbClient.query('COMMIT');
     return { demand: safeFormatDemand(updateRes.rows[0], clientRes.rows[0]?.name) };
+  } catch (err) {
+    await dbClient.query('ROLLBACK');
+    throw err;
+  } finally {
+    dbClient.release();
+  }
+}
+
+export async function deleteDemand(
+  database: Database,
+  identity: SessionResponse,
+  demandId: string
+): Promise<{ ok: true; id: string }> {
+  const dbClient = await database.pool.connect();
+  try {
+    await dbClient.query('BEGIN');
+    await dbClient.query('SELECT pg_advisory_xact_lock($1)', [IDENTITY_LOCK]);
+
+    const actor = await revalidateActorInsideTransaction(dbClient, identity.user.id, 'demands.write');
+    if (actor.role !== 'administrator') {
+      throw new AppError(403, 'FORBIDDEN');
+    }
+
+    const demandRes = await dbClient.query<{ id: string; created_by_user_id: string }>(`
+      SELECT id, created_by_user_id FROM demand WHERE id = $1 FOR UPDATE
+    `, [demandId]);
+    const current = demandRes.rows[0];
+    if (!current) throw new AppError(404, 'NOT_FOUND');
+
+    if (current.created_by_user_id !== actor.id) {
+      throw new AppError(403, 'ONLY_DEMAND_CREATOR_CAN_DELETE');
+    }
+
+    // Desvincula materiais antes de excluir a demanda para não bloquear por FK restrict e preservar arquivos do cliente
+    await dbClient.query(`
+      UPDATE material
+      SET task_id = NULL, demand_id = NULL, version = version + 1, updated_at = now()
+      WHERE demand_id = $1
+    `, [demandId]);
+
+    await dbClient.query(`DELETE FROM demand WHERE id = $1`, [demandId]);
+
+    await dbClient.query('COMMIT');
+    return { ok: true, id: demandId };
   } catch (err) {
     await dbClient.query('ROLLBACK');
     throw err;
@@ -1800,9 +1898,20 @@ export async function moveTaskKanban(
       const eventAction = nextStatus === 'changes_requested' ? 'task_changes_requested' : 'task_ready';
       await recordDemandEvent(dbClient, `
         INSERT INTO demand_event (id, demand_id, task_id, actor_id, actor_name, action, reason, metadata)
-        VALUES ($1, $2, $3, $4, $5, $6, 'Retornada para Tarefas via quadro Kanban', '{}'::jsonb)
+        VALUES ($1, $2, $3, $4, $5, $6, 'Retornada para Em aberto via quadro Kanban', '{}'::jsonb)
       `, [randomUUID(), taskRow.demand_id, taskId, actor.id, actor.name, eventAction], {});
     }
+
+    // Sincroniza status da demanda pai com o status de execução
+    const openTasksCountRes = await dbClient.query<{ count: number }>(`
+      SELECT count(*)::int AS count FROM task WHERE demand_id = $1 AND status != 'completed'
+    `, [taskRow.demand_id]);
+    const nextDemandStatus = (openTasksCountRes.rows[0]?.count ?? 0) === 0 ? 'completed' : 'open';
+    await dbClient.query(`
+      UPDATE demand
+      SET status = $2, version = version + 1, updated_at = now()
+      WHERE id = $1 AND status != $2
+    `, [taskRow.demand_id, nextDemandStatus]);
 
     await dbClient.query('COMMIT');
     return { task: safeFormatTask(updateRes.rows[0]) };

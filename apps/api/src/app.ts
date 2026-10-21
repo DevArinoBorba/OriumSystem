@@ -113,6 +113,7 @@ import {
   listDemands,
   createDemand,
   getDemandById,
+  deleteDemand,
   updateDemand,
   completeDemand,
   getDemandHistory,
@@ -556,6 +557,13 @@ export async function buildApp({ config, database, logger, driveGateway }: Optio
     const params = z.object({ id: z.string().uuid() }).parse(request.params);
     const input = completeDemandSchema.parse(request.body);
     return completeDemand(database, identity, params.id, input);
+  });
+
+  app.delete('/api/v1/demands/:id', async (request) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'demands.write');
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    return deleteDemand(database, identity, params.id);
   });
 
   app.get('/api/v1/demands/:id/history', async (request) => {

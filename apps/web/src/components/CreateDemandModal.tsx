@@ -3,11 +3,14 @@ import type { FormEvent } from 'react';
 import { createDemandSchema, type Client, type Demand } from '@orium/contracts';
 import { api, ApiError } from '../api.js';
 import { showToast } from './Toasts.js';
-import type { DemandFormState } from '../types.js';
+import type { DemandFormState, UserListItem } from '../types.js';
 
 interface CreateDemandModalProps {
+  currentUserId: string;
   clients: Client[];
   clientsLoaded: boolean;
+  users: UserListItem[];
+  usersLoaded: boolean;
   onClose: () => void;
   onCreated: (demand: Demand) => void;
   onUnauthorized: () => void;
@@ -21,9 +24,20 @@ const emptyDemandForm = (): DemandFormState => ({
   deliveryDate: '',
 });
 
-/** Modal "Novo chamado" (admin). Montado só enquanto aberto, então o rascunho começa vazio. */
-export function CreateDemandModal({ clients, clientsLoaded, onClose, onCreated, onUnauthorized }: CreateDemandModalProps) {
+/** Modal "Nova demanda" unificado (inclui responsável e checklist da demanda). */
+export function CreateDemandModal({
+  currentUserId,
+  clients,
+  clientsLoaded,
+  users,
+  usersLoaded,
+  onClose,
+  onCreated,
+  onUnauthorized,
+}: CreateDemandModalProps) {
   const [demandForm, setDemandForm] = useState<DemandFormState>(emptyDemandForm);
+  const [assignedToUserId, setAssignedToUserId] = useState<string>(currentUserId);
+  const [requirements, setRequirements] = useState<Array<{ title: string; mandatory: boolean }>>([]);
   const [demandFormBusy, setDemandFormBusy] = useState(false);
   const [demandFormError, setDemandFormError] = useState<string | null>(null);
   const demandFormSubmittingRef = useRef(false);
@@ -39,6 +53,23 @@ export function CreateDemandModal({ clients, clientsLoaded, onClose, onCreated, 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [demandFormBusy, onClose]);
 
+  function addRequirement() {
+    setRequirements((prev) => [...prev, { title: '', mandatory: false }]);
+  }
+
+  function updateRequirement(index: number, patch: Partial<{ title: string; mandatory: boolean }>) {
+    setRequirements((prev) => {
+      const next = [...prev];
+      const current = next[index] ?? { title: '', mandatory: false };
+      next[index] = { ...current, ...patch };
+      return next;
+    });
+  }
+
+  function removeRequirement(index: number) {
+    setRequirements((prev) => prev.filter((_, idx) => idx !== index));
+  }
+
   async function handleCreateDemand(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (demandFormSubmittingRef.current) return;
@@ -46,26 +77,32 @@ export function CreateDemandModal({ clients, clientsLoaded, onClose, onCreated, 
     setDemandFormBusy(true);
     setDemandFormError(null);
 
+    const cleanRequirements = requirements
+      .filter((r) => r.title.trim().length > 0)
+      .map((r) => ({ title: r.title.trim(), mandatory: r.mandatory }));
+
     const payload = {
       clientId: demandForm.clientId,
       title: demandForm.title.trim(),
       description: demandForm.description.trim(),
       priority: demandForm.priority,
       deliveryDate: demandForm.deliveryDate,
+      assignedToUserId: assignedToUserId || currentUserId,
+      ...(cleanRequirements.length > 0 ? { requirements: cleanRequirements } : {}),
     };
     const validation = createDemandSchema.safeParse(payload);
     if (!validation.success) {
       const firstIssue = validation.error.issues[0];
       const fieldName = firstIssue?.path[0] as string | undefined;
       if (fieldName === 'clientId') {
-        setDemandFormError('Selecione o cliente do chamado.');
+        setDemandFormError('Selecione o cliente da demanda.');
       } else if (fieldName === 'title') {
         demandTitleInputRef.current?.focus();
-        setDemandFormError('O título do chamado é obrigatório (1 a 160 caracteres).');
+        setDemandFormError('O título da demanda é obrigatório (1 a 160 caracteres).');
       } else if (fieldName === 'description') {
         setDemandFormError('A descrição não pode exceder 5000 caracteres.');
       } else if (fieldName === 'deliveryDate') {
-        setDemandFormError('Informe a data de entrega geral do chamado.');
+        setDemandFormError('Informe a data de entrega da demanda.');
       } else {
         setDemandFormError(firstIssue?.message || 'Verifique os dados preenchidos.');
       }
@@ -78,7 +115,7 @@ export function CreateDemandModal({ clients, clientsLoaded, onClose, onCreated, 
     try {
       const response = await api.createDemand(validation.data, controller.signal, onUnauthorized);
       const created = response.demand;
-      showToast(`${created.title} criado com sucesso.`);
+      showToast(`Demanda "${created.title}" criada com sucesso.`);
       onCreated(created);
     } catch (error) {
       if (error instanceof ApiError && error.status === 403) {
@@ -108,7 +145,7 @@ export function CreateDemandModal({ clients, clientsLoaded, onClose, onCreated, 
     >
       <div className="modal-card">
         <div className="modal-header">
-          <h2 id="demand-form-heading">Novo chamado</h2>
+          <h2 id="demand-form-heading">Nova demanda</h2>
           <button
             type="button"
             className="close-button"
@@ -127,28 +164,55 @@ export function CreateDemandModal({ clients, clientsLoaded, onClose, onCreated, 
             </div>
           )}
 
-          <div className="form-field">
-            <label htmlFor="demand-form-client">Cliente *</label>
-            <select
-              id="demand-form-client"
-              value={demandForm.clientId}
-              onChange={(event) => setDemandForm({ ...demandForm, clientId: event.target.value })}
-              disabled={demandFormBusy}
-              required
-            >
-              <option value="" disabled>
-                {clientsLoaded ? 'Selecione o cliente…' : 'Carregando clientes…'}
-              </option>
-              {clients.map((client) => (
-                <option key={client.id} value={client.id}>
-                  {client.name}
+          <div className="form-row">
+            <div className="form-field">
+              <label htmlFor="demand-form-client">Cliente *</label>
+              <select
+                id="demand-form-client"
+                value={demandForm.clientId}
+                onChange={(event) => setDemandForm({ ...demandForm, clientId: event.target.value })}
+                disabled={demandFormBusy}
+                required
+              >
+                <option value="" disabled>
+                  {clientsLoaded ? 'Selecione o cliente…' : 'Carregando clientes…'}
                 </option>
-              ))}
-            </select>
+                {clients.map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {client.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-field">
+              <label htmlFor="demand-form-assignee">Responsável *</label>
+              <select
+                id="demand-form-assignee"
+                value={assignedToUserId}
+                onChange={(event) => setAssignedToUserId(event.target.value)}
+                disabled={demandFormBusy}
+                required
+              >
+                {users.length === 0 ? (
+                  <option value={currentUserId}>
+                    {usersLoaded ? 'Você (responsável padrão)' : 'Carregando equipe…'}
+                  </option>
+                ) : (
+                  users
+                    .filter((u) => u.active)
+                    .map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name} {user.id === currentUserId ? '(você)' : ''}
+                      </option>
+                    ))
+                )}
+              </select>
+            </div>
           </div>
 
           <div className="form-field">
-            <label htmlFor="demand-form-title">Título do chamado *</label>
+            <label htmlFor="demand-form-title">Título da demanda *</label>
             <input
               ref={demandTitleInputRef}
               id="demand-form-title"
@@ -163,11 +227,11 @@ export function CreateDemandModal({ clients, clientsLoaded, onClose, onCreated, 
           </div>
 
           <div className="form-field">
-            <label htmlFor="demand-form-description">Descrição</label>
+            <label htmlFor="demand-form-description">Descrição / Briefing</label>
             <textarea
               id="demand-form-description"
               rows={4}
-              placeholder="Contexto, referências e orientações gerais do entregável…"
+              placeholder="Contexto, referências e orientações da demanda…"
               maxLength={5000}
               value={demandForm.description}
               onChange={(event) => setDemandForm({ ...demandForm, description: event.target.value })}
@@ -194,7 +258,7 @@ export function CreateDemandModal({ clients, clientsLoaded, onClose, onCreated, 
             </div>
             <div className="form-field">
               <label htmlFor="demand-form-date" className="fieldset-label">
-                Data de entrega geral do chamado *
+                Data de entrega *
               </label>
               <input
                 id="demand-form-date"
@@ -204,8 +268,53 @@ export function CreateDemandModal({ clients, clientsLoaded, onClose, onCreated, 
                 required
                 disabled={demandFormBusy}
               />
-              <span className="muted-text">Defina o prazo acordado com o cliente.</span>
+              <span className="muted-text">Defina o prazo de entrega da demanda.</span>
             </div>
+          </div>
+
+          <div className="form-field">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <label style={{ marginBottom: 0 }}>Checklist / Requisitos (opcional)</label>
+              <button
+                type="button"
+                className="text-button"
+                onClick={addRequirement}
+                disabled={demandFormBusy || requirements.length >= 30}
+              >
+                + Adicionar item
+              </button>
+            </div>
+            {requirements.map((req, idx) => (
+              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <input
+                  type="text"
+                  placeholder={`Item ${idx + 1} do checklist…`}
+                  maxLength={160}
+                  value={req.title}
+                  onChange={(e) => updateRequirement(idx, { title: e.target.value })}
+                  disabled={demandFormBusy}
+                  style={{ flex: 1 }}
+                />
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.78rem', whiteSpace: 'nowrap', marginBottom: 0 }}>
+                  <input
+                    type="checkbox"
+                    checked={req.mandatory}
+                    onChange={(e) => updateRequirement(idx, { mandatory: e.target.checked })}
+                    disabled={demandFormBusy}
+                  />
+                  Obrigatório
+                </label>
+                <button
+                  type="button"
+                  className="close-button"
+                  onClick={() => removeRequirement(idx)}
+                  disabled={demandFormBusy}
+                  aria-label="Remover item"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
           </div>
 
           <div className="modal-actions">
@@ -213,7 +322,7 @@ export function CreateDemandModal({ clients, clientsLoaded, onClose, onCreated, 
               Cancelar
             </button>
             <button type="submit" className="primary-button" disabled={demandFormBusy}>
-              {demandFormBusy ? 'Criando…' : 'Abrir chamado'}
+              {demandFormBusy ? 'Criando…' : 'Criar demanda'}
             </button>
           </div>
         </form>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
   updateDemandSchema,
@@ -12,9 +12,7 @@ import { api, ApiError } from '../api.js';
 import { showToast } from './Toasts.js';
 import { DeadlineDate } from './DeadlineDate.js';
 import { CreateDemandModal } from './CreateDemandModal.js';
-import { CreateTaskForm } from './CreateTaskForm.js';
 import { TaskDetailView } from './TaskDetailView.js';
-import { taskStatusLabel } from '../taskStatus.js';
 import { UseTemplateModal } from './UseTemplateModal.js';
 import { ManageTemplatesModal } from './ManageTemplatesModal.js';
 import type {
@@ -115,8 +113,10 @@ export function DemandsView({
   const completeDialogRef = useRef<HTMLDialogElement>(null);
   const completeActionBusyRef = useRef(false);
 
-  // ---------------- Create task form ----------------
-  const [taskFormOpen, setTaskFormOpen] = useState(false);
+  // ---------------- Delete demand confirmation ----------------
+  const [deleteTarget, setDeleteTarget] = useState<Demand | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // ---------------- Selected task detail (renders TaskDetailView) ----------------
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -166,19 +166,6 @@ export function DemandsView({
     void loadClientsList();
     void loadUsersList();
   }, [loadClientsList, loadUsersList]);
-
-  const usersById = useMemo(() => {
-    const map: Record<string, { name: string; id: string }> = {};
-    for (const user of users) {
-      map[user.id] = user;
-    }
-    return map;
-  }, [users]);
-
-  function userName(userId: string): string {
-    const user = usersById[userId];
-    return user ? user.name : userId;
-  }
 
   // ============ List loader ============
   const loadDemands = useCallback(
@@ -258,11 +245,58 @@ export function DemandsView({
       try {
         const response = await api.getDemand(id, controller.signal, onUnauthorized);
         if (detailRequestRef.current === controller && !controller.signal.aborted) {
-          setDemand(response.demand);
-          setTasks(response.tasks);
-          if (!refreshInPlace) {
-            setSelectedTaskId(null);
+          let nextDemand = response.demand;
+          let nextTasks = response.tasks;
+
+          // Se a demanda antiga ainda não tinha registro de execução, cria automaticamente nos bastidores
+          if (nextTasks.length === 0 && session.permissions.includes('tasks.manage')) {
+            try {
+              const createdTaskRes = await api.createTask(
+                {
+                  demandId: nextDemand.id,
+                  assignedToUserId: session.user.id,
+                  title: nextDemand.title,
+                  description: nextDemand.description,
+                  priority: nextDemand.priority,
+                  deliveryDate: nextDemand.deliveryDate,
+                  requirements: [],
+                  dependsOnTaskIds: [],
+                },
+                controller.signal,
+                onUnauthorized,
+              );
+              nextTasks = [createdTaskRes.task];
+            } catch {
+              // Se não puder criar automaticamente, segue com os dados existentes
+            }
           }
+
+          // Se a execução já foi concluída e a demanda ainda está open, sincroniza automaticamente
+          if (
+            nextDemand.status === 'open' &&
+            nextTasks.length > 0 &&
+            nextTasks.every((t) => t.status === 'completed') &&
+            session.permissions.includes('demands.write')
+          ) {
+            try {
+              const completedRes = await api.completeDemand(
+                nextDemand.id,
+                { version: nextDemand.version },
+                controller.signal,
+                onUnauthorized,
+              );
+              nextDemand = completedRes.demand;
+            } catch {
+              // Ignora caso já tenha sido concluída em paralelo
+            }
+          }
+
+          setDemand(nextDemand);
+          setTasks(nextTasks);
+          setSelectedTaskId((prev) => {
+            if (prev && nextTasks.some((t) => t.id === prev)) return prev;
+            return nextTasks[0]?.id ?? null;
+          });
         }
       } catch (error) {
         if (controller.signal.aborted || (error instanceof DOMException && error.name === 'AbortError')) return;
@@ -284,7 +318,7 @@ export function DemandsView({
         }
       }
     },
-    [onUnauthorized],
+    [onUnauthorized, session.permissions, session.user.id],
   );
 
   // Abort in-flight detail request only when the component unmounts (never on filter changes).
@@ -563,21 +597,6 @@ export function DemandsView({
     }
   }, [completeConfirm]);
 
-  // ============ Create task ============
-  function openCreateTask() {
-    setTaskFormOpen(true);
-  }
-
-  const closeCreateTask = useCallback(() => setTaskFormOpen(false), []);
-
-  function handleTaskCreated() {
-    setTaskFormOpen(false);
-    setSelectedTaskId(null);
-    if (selectedDemandId) {
-      void loadDemandDetail(selectedDemandId);
-    }
-  }
-
   // ============ Derived UI helpers ============
   function formatDateTime(iso: string): string {
     try {
@@ -598,6 +617,46 @@ export function DemandsView({
     return d.status === 'completed' ? 'Concluída' : 'Em aberto';
   }
 
+  function canDeleteDemand(d: Demand | null | undefined): boolean {
+    return Boolean(isAdmin && d && d.createdByUserId === session.user.id);
+  }
+
+  function openDeleteDemand(target: Demand) {
+    if (deleteBusy) return;
+    setDeleteError(null);
+    setDeleteTarget(target);
+  }
+
+  async function handleConfirmDeleteDemand() {
+    if (!deleteTarget || deleteBusy) return;
+    setDeleteBusy(true);
+    setDeleteError(null);
+    const controller = new AbortController();
+    try {
+      await api.deleteDemand(deleteTarget.id, controller.signal, onUnauthorized);
+      const deletedTitle = deleteTarget.title;
+      const deletedId = deleteTarget.id;
+      setDeleteTarget(null);
+      showToast(`Demanda "${deletedTitle}" excluída com sucesso.`);
+      if (selectedDemandId === deletedId) {
+        setSelectedDemandId(null);
+        setDemand(null);
+        setTasks([]);
+      }
+      void loadDemands(page, status, priority, appliedSearch);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 403) {
+        setDeleteError('Apenas o administrador que criou esta demanda pode excluí-la.');
+      } else if (error instanceof ApiError && error.status === 404) {
+        setDeleteError('Esta demanda já foi removida.');
+      } else {
+        setDeleteError('Não foi possível excluir a demanda. Tente novamente.');
+      }
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
   const allTasksCompleted = tasks.length > 0 && tasks.every((t) => t.status === 'completed');
   const canCompleteDemand = isAdmin && hasDemandsWrite && demand?.status === 'open';
 
@@ -610,8 +669,8 @@ export function DemandsView({
             <h1 id="demands-heading">{isAdmin ? 'Demandas' : 'Minhas demandas'}</h1>
             <p className="panel-subtitle">
               {isAdmin
-                ? 'Acompanhe os chamados, distribua tarefas e gerencie os prazos.'
-                : 'Aqui aparecem os chamados com tarefas atribuídas a você.'}
+                ? 'Acompanhe todas as demandas, responsáveis e prazos de entrega.'
+                : 'Aqui aparecem as demandas atribuídas a você.'}
             </p>
           </div>
           <div className="panel-actions">
@@ -642,7 +701,7 @@ export function DemandsView({
                 onClick={openCreateDemand}
                 disabled={loading || demandFormOpen}
               >
-                + Novo chamado
+                + Nova demanda
               </button>
             )}
           </div>
@@ -737,7 +796,7 @@ export function DemandsView({
           <div className="empty-state">
             {appliedSearch ? (
               <>
-                <p className="empty-title">Nenhum chamado encontrado para a pesquisa informada.</p>
+                <p className="empty-title">Nenhuma demanda encontrada para a pesquisa informada.</p>
                 <p className="empty-description">Tente pesquisar com outro termo ou limpe os filtros.</p>
                 <button type="button" className="secondary-button" onClick={handleClearSearch}>
                   Limpar pesquisa
@@ -745,18 +804,18 @@ export function DemandsView({
               </>
             ) : isAdmin ? (
               <>
-                <p className="empty-title">Nenhum chamado cadastrado ainda.</p>
-                <p className="empty-description">Comece abrindo o primeiro chamado de um cliente.</p>
+                <p className="empty-title">Nenhuma demanda cadastrada ainda.</p>
+                <p className="empty-description">Comece abrindo a primeira demanda de um cliente.</p>
                 {hasDemandsWrite && (
                   <button type="button" className="primary-button" onClick={openCreateDemand}>
-                    + Novo chamado
+                    + Nova demanda
                   </button>
                 )}
               </>
             ) : (
               <>
-                <p className="empty-title">Nenhum chamado atribuído a você ainda.</p>
-                <p className="empty-description">Quando o responsável distribuir tarefas para você, elas aparecerão aqui.</p>
+                <p className="empty-title">Nenhuma demanda atribuída a você ainda.</p>
+                <p className="empty-description">Quando o responsável atribuir demandas para você, elas aparecerão aqui.</p>
               </>
             )}
           </div>
@@ -766,7 +825,7 @@ export function DemandsView({
               <table className="data-table" aria-label="Tabela de demandas">
                 <thead>
                   <tr>
-                    <th scope="col">Chamado</th>
+                    <th scope="col">Demanda</th>
                     <th scope="col">Cliente</th>
                     <th scope="col">Prioridade</th>
                     <th scope="col">Entrega</th>
@@ -817,6 +876,16 @@ export function DemandsView({
                           >
                             Ver detalhes
                           </button>
+                          {canDeleteDemand(d) && (
+                            <button
+                              type="button"
+                              className="action-btn archive"
+                              onClick={() => openDeleteDemand(d)}
+                              title="Excluir demanda (disponível apenas para o administrador que a criou)"
+                            >
+                              Excluir
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -828,7 +897,7 @@ export function DemandsView({
             {/* Pagination */}
             <div className="pagination-bar">
               <span className="pagination-info">
-                Página {page} de {Math.max(1, Math.ceil(total / pageSize))} ({total} {total === 1 ? 'chamado' : 'chamados'} no total)
+                Página {page} de {Math.max(1, Math.ceil(total / pageSize))} ({total} {total === 1 ? 'demanda' : 'demandas'} no total)
               </span>
               <div className="pagination-controls">
                 <button
@@ -855,8 +924,11 @@ export function DemandsView({
         {/* Create demand modal pop-up (admin) */}
         {isAdmin && demandFormOpen && (
           <CreateDemandModal
+            currentUserId={session.user.id}
             clients={clients}
             clientsLoaded={clientsLoaded}
+            users={users}
+            usersLoaded={usersLoaded}
             onClose={closeCreateDemand}
             onCreated={handleDemandCreated}
             onUnauthorized={onUnauthorized}
@@ -879,6 +951,66 @@ export function DemandsView({
           onUnauthorized={onUnauthorized}
         />
 
+        {deleteTarget && (
+          <div
+            className="modal-backdrop"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-demand-list-heading"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget && !deleteBusy) {
+                setDeleteTarget(null);
+              }
+            }}
+          >
+            <div className="modal-card" style={{ maxWidth: 460 }}>
+              <div className="modal-header">
+                <h2 id="delete-demand-list-heading">Excluir demanda</h2>
+                <button
+                  type="button"
+                  className="close-button"
+                  onClick={() => setDeleteTarget(null)}
+                  disabled={deleteBusy}
+                  aria-label="Fechar confirmação"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="modal-body" style={{ marginBottom: 0 }}>
+                {deleteError && (
+                  <div className="alert-banner error" role="alert">
+                    <span>{deleteError}</span>
+                  </div>
+                )}
+                <p style={{ margin: '0 0 8px' }}>
+                  Deseja excluir permanentemente a demanda <strong>&ldquo;{deleteTarget.title}&rdquo;</strong> ({deleteTarget.client.name})?
+                </p>
+                <p className="muted-text" style={{ margin: '0 0 18px' }}>
+                  Esta ação remove a demanda e todo o seu histórico de execução e comentários. Não pode ser desfeita.
+                </p>
+                <div className="modal-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setDeleteTarget(null)}
+                    disabled={deleteBusy}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    className="danger-button"
+                    onClick={() => void handleConfirmDeleteDemand()}
+                    disabled={deleteBusy}
+                  >
+                    {deleteBusy ? 'Excluindo…' : 'Sim, excluir demanda'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
       </section>
     );
   }
@@ -898,13 +1030,13 @@ export function DemandsView({
               ← Voltar para as demandas
             </button>
           </div>
-          <h1 id="demand-detail-heading">{demand?.title ?? 'Detalhes do chamado'}</h1>
+          <h1 id="demand-detail-heading">{demand?.title ?? 'Detalhes da demanda'}</h1>
           <p className="panel-subtitle">
             {demand ? (
               <>
                 {demand.client.name} • Prioridade{' '}
                 <span className={`priority-badge ${demand.priority}`}>{priorityLabels[demand.priority]}</span>{' '}
-                • Entrega geral: <strong><DeadlineDate date={demand.deliveryDate} done={demand.status !== 'open'} /></strong>
+                • Entrega: <strong><DeadlineDate date={demand.deliveryDate} done={demand.status !== 'open'} /></strong>
                 {' • '}
                 <span className={`status-badge ${demand.status === 'completed' ? 'complete' : 'open'}`}>
                   {demandStatusLabel(demand)}
@@ -937,7 +1069,7 @@ export function DemandsView({
 
           {detailLoading ? (
             <div className="empty-state" aria-live="polite">
-              <p className="status-text">Carregando chamado…</p>
+              <p className="status-text">Carregando demanda…</p>
             </div>
           ) : (
             <>
@@ -952,19 +1084,14 @@ export function DemandsView({
                     type="button"
                     className="secondary-button"
                     onClick={() => onOpenMaterials({ clientId: demand.clientId, demandId: demand.id })}
-                    title="Ver materiais deste chamado"
+                    title="Ver materiais desta demanda"
                   >
                     Materiais
                   </button>
                 )}
-                {isAdmin && hasDemandsWrite && demand?.status === 'open' && (
-                  <button type="button" className="primary-button" onClick={openCreateTask} disabled={taskFormOpen}>
-                    + Nova tarefa
-                  </button>
-                )}
                 {isAdmin && hasDemandsWrite && (
                   <button type="button" className="secondary-button" onClick={openEditDemand} disabled={editOpen || !demand}>
-                    Editar dados do chamado
+                    Editar demanda
                   </button>
                 )}
                 {isAdmin && (
@@ -972,29 +1099,32 @@ export function DemandsView({
                     {historyOpen ? 'Histórico carregado' : 'Histórico'}
                   </button>
                 )}
-                {isAdmin && canCompleteDemand && (
+                {isAdmin && canCompleteDemand && allTasksCompleted && (
                   <button
                     type="button"
                     className="danger-button"
                     onClick={openCompleteDemand}
-                    disabled={!allTasksCompleted}
-                    title={allTasksCompleted ? '' : 'Conclua todas as tarefas antes de concluir o chamado'}
                   >
-                    Concluir chamado
+                    Concluir demanda
+                  </button>
+                )}
+                {canDeleteDemand(demand) && demand && (
+                  <button
+                    type="button"
+                    className="danger-button"
+                    onClick={() => openDeleteDemand(demand)}
+                    title="Excluir demanda (disponível apenas para o administrador que a criou)"
+                  >
+                    Excluir demanda
                   </button>
                 )}
               </div>
-              {!allTasksCompleted && canCompleteDemand && (
-                <p className="muted-text" style={{ marginTop: 0 }}>
-                  Para concluir o chamado, todas as tarefas precisam estar concluídas.
-                </p>
-              )}
 
               {/* Edit demand inline form (admin) */}
               {isAdmin && editOpen && demand && (
                 <section className="inline-panel" aria-labelledby="edit-demand-heading">
                   <div className="panel-header">
-                    <h2 id="edit-demand-heading">Editar dados do chamado</h2>
+                    <h2 id="edit-demand-heading">Editar demanda</h2>
                     <button
                       type="button"
                       className="close-button"
@@ -1027,12 +1157,8 @@ export function DemandsView({
                       </div>
                     )}
 
-                    <p className="muted-text" style={{ marginBottom: 12 }}>
-                      Aqui você ajusta os dados gerais do chamado. Para prazos de tarefas individuais, use os detalhes de cada tarefa.
-                    </p>
-
                     <div className="form-field">
-                      <label htmlFor="edit-demand-title">Título do chamado *</label>
+                      <label htmlFor="edit-demand-title">Título da demanda *</label>
                       <input
                         ref={editTitleInputRef}
                         id="edit-demand-title"
@@ -1076,7 +1202,7 @@ export function DemandsView({
                       </div>
                       <div className="form-field">
                         <label htmlFor="edit-demand-date" className="fieldset-label">
-                          Data de entrega geral do chamado *
+                          Data de entrega *
                         </label>
                         <input
                           id="edit-demand-date"
@@ -1086,7 +1212,6 @@ export function DemandsView({
                           required
                           disabled={editBusy}
                         />
-                        <span className="muted-text">Ajuste aqui o compromisso geral acordado com o cliente, quando necessário.</span>
                       </div>
                     </div>
 
@@ -1102,25 +1227,11 @@ export function DemandsView({
                 </section>
               )}
 
-              {/* Create task inline form (admin) */}
-              {isAdmin && taskFormOpen && demand && (
-                <CreateTaskForm
-                  currentUserId={session.user.id}
-                  demand={demand}
-                  tasks={tasks}
-                  users={users}
-                  usersLoaded={usersLoaded}
-                  onClose={closeCreateTask}
-                  onCreated={handleTaskCreated}
-                  onUnauthorized={onUnauthorized}
-                />
-              )}
-
               {/* History */}
               {isAdmin && historyOpen && (
                 <section className="history-panel" aria-labelledby="history-title">
                   <div className="section-heading-row">
-                    <h2 className="section-heading" id="history-title">Histórico do chamado</h2>
+                    <h2 className="section-heading" id="history-title">Histórico da demanda</h2>
                     <button type="button" className="close-button" onClick={() => setHistoryOpen(false)} aria-label="Fechar histórico">
                       ✕
                     </button>
@@ -1130,7 +1241,7 @@ export function DemandsView({
                   ) : historyError ? (
                     <p className="error-text">{historyError}</p>
                   ) : events.length === 0 ? (
-                    <p className="muted-text">Ainda não há eventos registrados para este chamado.</p>
+                    <p className="muted-text">Ainda não há eventos registrados para esta demanda.</p>
                   ) : (
                     <ol className="event-list">
                       {events.map((event) => (
@@ -1149,77 +1260,24 @@ export function DemandsView({
                 </section>
               )}
 
-              {/* Tasks */}
-              <div className="section-heading-row">
-                <h2 className="section-heading">Tarefas ({tasks.length})</h2>
-              </div>
-
-              {selectedTaskId ? (
-                <div className="task-detail-shell">
+              {/* Visão unificada da Demanda (Andamento, Checklist e Comentários) */}
+              {(selectedTaskId ?? tasks[0]?.id) ? (
+                <div className="task-detail-shell" style={{ marginTop: 16 }}>
                   <TaskDetailView
-                    taskId={selectedTaskId}
+                    taskId={(selectedTaskId ?? tasks[0]?.id)!}
                     session={session}
                     availableTasks={tasks}
+                    embeddedInDemand={true}
                     onUnauthorized={onUnauthorized}
                     onChanged={() => {
                       if (selectedDemandId) {
                         void loadDemandDetail(selectedDemandId, true);
                       }
                     }}
-                    onBack={() => setSelectedTaskId(null)}
+                    onBack={() => setSelectedDemandId(null)}
                   />
                 </div>
-              ) : tasks.length === 0 ? (
-                <div className="empty-state">
-                  {isAdmin ? (
-                    <>
-                      <p className="empty-title">Nenhuma tarefa criada neste chamado ainda.</p>
-                      <p className="empty-description">Distribua o trabalho criando a primeira tarefa.</p>
-                      {hasDemandsWrite && demand?.status === 'open' && (
-                        <button type="button" className="primary-button" onClick={openCreateTask}>
-                          + Nova tarefa
-                        </button>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <p className="empty-title">Você ainda não tem tarefas neste chamado.</p>
-                      <p className="empty-description">Quando o responsável atribuir trabalho a você, ele aparecerá aqui.</p>
-                    </>
-                  )}
-                </div>
-              ) : (
-                <ul className="task-list">
-                  {tasks.map((task) => (
-                    <li key={task.id} className="task-list-item">
-                      <div className="task-item-main">
-                        <div className="task-item-title">
-                          {task.title}
-                          <span className={`task-badge status-${task.status}`}>{taskStatusLabel(task.status)}</span>
-                          <span className={`priority-badge ${task.priority}`}>{priorityLabels[task.priority]}</span>
-                        </div>
-                        <div className="task-item-meta">
-                          {isAdmin && hasUsersRead && (
-                            <span>Responsável: <strong>{userName(task.assignedToUserId)}</strong></span>
-                          )}
-                          {isAdmin && <span className="muted-dash">•</span>}
-                          <span>Entrega: <strong><DeadlineDate date={task.deliveryDate} done={task.status === 'completed'} /></strong></span>
-                          {task.acceptedAt && <span className="muted-dash">• Aceite registrado</span>}
-                        </div>
-                      </div>
-                      <div className="action-buttons">
-                        <button
-                          type="button"
-                          className="action-btn edit"
-                          onClick={() => setSelectedTaskId(task.id)}
-                        >
-                          Abrir detalhes
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              ) : null}
             </>
           )}
         </>
@@ -1296,6 +1354,66 @@ export function DemandsView({
           </button>
         </div>
       </dialog>
+
+      {deleteTarget && (
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-demand-detail-heading"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !deleteBusy) {
+              setDeleteTarget(null);
+            }
+          }}
+        >
+          <div className="modal-card" style={{ maxWidth: 460 }}>
+            <div className="modal-header">
+              <h2 id="delete-demand-detail-heading">Excluir demanda</h2>
+              <button
+                type="button"
+                className="close-button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleteBusy}
+                aria-label="Fechar confirmação"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="modal-body" style={{ marginBottom: 0 }}>
+              {deleteError && (
+                <div className="alert-banner error" role="alert">
+                  <span>{deleteError}</span>
+                </div>
+              )}
+              <p style={{ margin: '0 0 8px' }}>
+                Deseja excluir permanentemente a demanda <strong>&ldquo;{deleteTarget.title}&rdquo;</strong> ({deleteTarget.client.name})?
+              </p>
+              <p className="muted-text" style={{ margin: '0 0 18px' }}>
+                Esta ação remove a demanda e todo o seu histórico de execução e comentários. Não pode ser desfeita.
+              </p>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setDeleteTarget(null)}
+                  disabled={deleteBusy}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="danger-button"
+                  onClick={() => void handleConfirmDeleteDemand()}
+                  disabled={deleteBusy}
+                >
+                  {deleteBusy ? 'Excluindo…' : 'Sim, excluir demanda'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

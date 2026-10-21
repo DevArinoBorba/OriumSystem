@@ -413,6 +413,9 @@ export function App() {
         busy={busySignOut}
         unreadCount={unreadCount}
         onOpenSearch={() => setPaletteOpen(true)}
+        onOpenItem={handleOpenItem}
+        onUnauthorized={handleUnauthorized}
+        refreshUnread={refreshUnread}
       />
 
       {paletteOpen && (

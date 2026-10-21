@@ -76,6 +76,7 @@ export interface TaskDetailViewProps {
   taskId: string;
   session: SessionResponse;
   availableTasks?: Task[];
+  embeddedInDemand?: boolean;
   onUnauthorized: () => void;
   onChanged: () => void;
   onBack: () => void;
@@ -129,6 +130,7 @@ export function TaskDetailView({
   taskId,
   session,
   availableTasks,
+  embeddedInDemand = false,
   onUnauthorized,
   onChanged,
   onBack,
@@ -618,7 +620,7 @@ export function TaskDetailView({
   if (loading) {
     return (
       <section className="detail-card">
-        <p className="muted">Carregando detalhes da tarefa...</p>
+        <p className="muted">Carregando andamento da demanda...</p>
       </section>
     );
   }
@@ -627,11 +629,13 @@ export function TaskDetailView({
     return (
       <section className="detail-card">
         <div className="error" role="alert">
-          <p>{error || 'Não foi possível carregar a tarefa.'}</p>
+          <p>{error || 'Não foi possível carregar a demanda.'}</p>
         </div>
-        <button type="button" className="secondary-button" onClick={onBack}>
-          ← Voltar
-        </button>
+        {!embeddedInDemand && (
+          <button type="button" className="secondary-button" onClick={onBack}>
+            ← Voltar
+          </button>
+        )}
       </section>
     );
   }
@@ -647,36 +651,53 @@ export function TaskDetailView({
   return (
     <article className="task-detail-view detail-card">
       {/* Header bar */}
-      <header className="task-header" style={{ marginBottom: '20px' }}>
-        <button
-          type="button"
-          className="text-button"
-          onClick={onBack}
-          disabled={busy}
-          style={{ marginBottom: '12px' }}
-        >
-          ← Voltar para Demandas
-        </button>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
-          <div>
-            <span className="eyebrow">Tarefa</span>
-            <h1 style={{ fontSize: '1.5rem', margin: '4px 0 8px' }}>{task.title}</h1>
-            <p className="muted" style={{ margin: 0 }}>
-              Responsável: <strong>{assigneeName}</strong> | Entrega: <strong><DeadlineDate date={task.deliveryDate} done={task.status === 'completed'} /></strong>
+      {embeddedInDemand ? (
+        <header className="task-header" style={{ marginBottom: '20px', paddingBottom: '14px', borderBottom: '1px solid var(--color-border)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <p className="muted" style={{ margin: 0, fontSize: '0.92rem' }}>
+              Responsável: <strong style={{ color: 'var(--color-text-main)' }}>{assigneeName}</strong> • Prazo de execução:{' '}
+              <strong><DeadlineDate date={task.deliveryDate} done={task.status === 'completed'} /></strong>
+              {task.acceptedAt && <span> • Aceite confirmado</span>}
             </p>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <span className={`badge badge-status-${task.status}`}>
+                {STATUS_LABELS[task.status]}
+              </span>
+            </div>
           </div>
+        </header>
+      ) : (
+        <header className="task-header" style={{ marginBottom: '20px' }}>
+          <button
+            type="button"
+            className="text-button"
+            onClick={onBack}
+            disabled={busy}
+            style={{ marginBottom: '12px' }}
+          >
+            ← Voltar para Demandas
+          </button>
 
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <span className={`badge badge-${task.priority}`}>
-              Prioridade: {PRIORITY_LABELS[task.priority]}
-            </span>
-            <span className={`badge badge-status-${task.status}`}>
-              {STATUS_LABELS[task.status]}
-            </span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <span className="eyebrow">Demanda</span>
+              <h1 style={{ fontSize: '1.5rem', margin: '4px 0 8px' }}>{task.title}</h1>
+              <p className="muted" style={{ margin: 0 }}>
+                Responsável: <strong>{assigneeName}</strong> | Entrega: <strong><DeadlineDate date={task.deliveryDate} done={task.status === 'completed'} /></strong>
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <span className={`badge badge-${task.priority}`}>
+                Prioridade: {PRIORITY_LABELS[task.priority]}
+              </span>
+              <span className={`badge badge-status-${task.status}`}>
+                {STATUS_LABELS[task.status]}
+              </span>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
+      )}
 
       {/* Global Alerts / Notices */}
       {actionError && (
@@ -701,10 +722,14 @@ export function TaskDetailView({
 
       {/* Description & Metadata */}
       <section className="task-info" style={{ marginBottom: '24px' }}>
-        <label>Descrição</label>
-        <p style={{ whiteSpace: 'pre-wrap', margin: '6px 0 16px', color: 'var(--color-text-main)' }}>
-          {task.description || <span className="muted">Nenhuma descrição informada.</span>}
-        </p>
+        {!embeddedInDemand && (
+          <>
+            <label>Descrição</label>
+            <p style={{ whiteSpace: 'pre-wrap', margin: '6px 0 16px', color: 'var(--color-text-main)' }}>
+              {task.description || <span className="muted">Nenhuma descrição informada.</span>}
+            </p>
+          </>
+        )}
 
         {task.deliveryNotes && (() => {
           const parsedNotes = parseContentWithPrints(task.deliveryNotes);
@@ -748,7 +773,7 @@ export function TaskDetailView({
 
         {task.status === 'paused' && task.pauseReason && (
           <div style={{ background: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', padding: '14px', borderRadius: '10px', marginBottom: '16px' }}>
-            <label style={{ color: 'var(--color-text-main)', fontWeight: 600 }}>Tarefa em Pausa</label>
+            <label style={{ color: 'var(--color-text-main)', fontWeight: 600 }}>Demanda em Pausa</label>
             <p style={{ margin: '4px 0 0', color: 'var(--color-text-muted)' }}>Motivo: {task.pauseReason}</p>
           </div>
         )}
@@ -765,20 +790,20 @@ export function TaskDetailView({
               onClick={handleAcceptTask}
               disabled={busy}
             >
-              Aceitar Tarefa
+              Aceitar Demanda
             </button>
             {task.status === 'ready' && (
               <button
                 type="button"
                 className="primary-button"
                 disabled
-                title="Aceite a tarefa antes de iniciar a produção."
+                title="Aceite a demanda antes de iniciar a produção."
               >
                 Iniciar Produção
               </button>
             )}
             <small className="muted" style={{ display: 'block', width: '100%', margin: '4px 0 0' }}>
-              Aceite a tarefa antes de iniciar a produção.
+              Aceite a demanda antes de iniciar a produção.
             </small>
           </div>
         )}
@@ -826,7 +851,7 @@ export function TaskDetailView({
             onClick={() => setReviewDraft((prev) => ({ ...prev, active: !prev.active }))}
             disabled={busy}
           >
-            {reviewDraft.active ? 'Fechar Painel de Revisão' : 'Avaliar / Revisar Tarefa'}
+            {reviewDraft.active ? 'Fechar Painel de Revisão' : 'Avaliar / Revisar Demanda'}
           </button>
         )}
 
@@ -837,7 +862,7 @@ export function TaskDetailView({
             onClick={() => setApprovePauseDraft((prev) => ({ ...prev, active: !prev.active }))}
             disabled={busy}
           >
-            {approvePauseDraft.active ? 'Fechar Painel de Pausa' : 'Autorizar Pausa (Monique)'}
+            {approvePauseDraft.active ? 'Fechar Painel de Pausa' : 'Autorizar Pausa'}
           </button>
         )}
 
@@ -848,7 +873,7 @@ export function TaskDetailView({
             onClick={handleResumeTask}
             disabled={busy}
           >
-            Retomar Tarefa
+            Retomar Demanda
           </button>
         )}
 
@@ -859,7 +884,7 @@ export function TaskDetailView({
             onClick={() => setReassignDraft((prev) => ({ ...prev, active: !prev.active }))}
             disabled={busy}
           >
-            {reassignDraft.active ? 'Cancelar Reatribuição' : 'Reatribuir Tarefa'}
+            {reassignDraft.active ? 'Cancelar Reatribuição' : 'Alterar Responsável'}
           </button>
         )}
       </section>
@@ -1204,9 +1229,9 @@ export function TaskDetailView({
 
       {/* --- Requirements Section --- */}
       <section className="requirements-section" style={{ marginBottom: '28px' }}>
-        <h2 style={{ fontSize: '1.25rem', marginBottom: '12px' }}>Requisitos da Tarefa</h2>
+        <h2 style={{ fontSize: '1.25rem', marginBottom: '12px' }}>Checklist / Requisitos da Demanda</h2>
         {requirements.length === 0 ? (
-          <p className="muted">Nenhum requisito cadastrado para esta tarefa.</p>
+          <p className="muted">Nenhum requisito cadastrado para esta demanda.</p>
         ) : (
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: '8px' }}>
             {requirements.map((req) => (
@@ -1248,7 +1273,8 @@ export function TaskDetailView({
         )}
       </section>
 
-      {/* --- Dependencies Section --- */}
+      {/* --- Dependencies Section (somente se houver dependências legadas) --- */}
+      {(dependencies.length > 0 || eligibleDepTasks.length > 0) && (
       <section className="dependencies-section" style={{ marginBottom: '28px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
           <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Dependências (Grafo DAG)</h2>
@@ -1337,10 +1363,11 @@ export function TaskDetailView({
           </ul>
         )}
       </section>
+      )}
 
       {/* --- Comments Section (Assignee & Admin) --- */}
       <section className="comments-section" style={{ marginTop: '32px', borderTop: '1px solid var(--color-border)', paddingTop: '24px' }}>
-        <h2 style={{ fontSize: '1.25rem', marginBottom: '16px' }}>Comentários da Tarefa</h2>
+        <h2 style={{ fontSize: '1.25rem', marginBottom: '16px' }}>Comentários da Demanda</h2>
 
         {comments.length === 0 ? (
           <p className="muted">Nenhum comentário registrado.</p>

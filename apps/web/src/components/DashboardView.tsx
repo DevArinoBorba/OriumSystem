@@ -74,13 +74,13 @@ const topSections: SectionMeta[] = [
   {
     key: 'production',
     title: 'Em produção',
-    description: 'Trabalhos com relógio operacional em andamento.',
-    headline: 'Tarefa',
+    description: 'Demandas em andamento na operação.',
+    headline: 'Demanda',
   },
   {
     key: 'awaitingAction',
     title: 'Dependendo de ação',
-    description: 'Itens aguardando revisão, aprovação, material, retorno ou decisão.',
+    description: 'Demandas aguardando revisão, aprovação, material, retorno ou decisão.',
     headline: 'Ação pendente',
   },
 ];
@@ -89,14 +89,14 @@ const pendingSections: SectionMeta[] = [
   {
     key: 'overdueTasks',
     title: 'Atrasadas na operação',
-    description: 'Tarefas atrasadas no prazo operacional (começaram e não foram concluídas).',
+    description: 'Demandas atrasadas no prazo operacional.',
     headline: 'Atraso operacional',
   },
   {
     key: 'overdueDemands',
-    title: 'Chamados com prazo vencido',
-    description: 'Chamados abertos cujo prazo de entrega já passou.',
-    headline: 'Prazo do chamado vencido',
+    title: 'Demandas com prazo vencido',
+    description: 'Demandas abertas cujo prazo de entrega já passou.',
+    headline: 'Prazo vencido',
   },
   {
     key: 'dueToday',
@@ -113,7 +113,7 @@ const pendingSections: SectionMeta[] = [
   {
     key: 'urgent',
     title: 'Urgentes',
-    description: 'Trabalhos de prioridade urgente em aberto.',
+    description: 'Demandas de prioridade urgente em aberto.',
     headline: 'Urgente',
   },
 ];
@@ -134,7 +134,7 @@ interface KanbanColumnMeta {
 const kanbanColumns: KanbanColumnMeta[] = [
   {
     key: 'tasks',
-    title: 'Tarefas',
+    title: 'Demandas',
     subtitle: 'Tudo o que está em aberto',
     accentClass: 'col-tasks',
   },
@@ -279,7 +279,29 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
             const fetchedItems: DashboardItem[] = [];
             for (const entry of details) {
               if (!entry) continue;
-              const { demand, tasks } = entry;
+              const { demand } = entry;
+              let { tasks } = entry;
+              if (tasks.length === 0 && session.permissions.includes('tasks.manage') && demand.status === 'open') {
+                try {
+                  const createdTaskRes = await api.createTask(
+                    {
+                      demandId: demand.id,
+                      assignedToUserId: session.user.id,
+                      title: demand.title,
+                      description: demand.description,
+                      priority: demand.priority,
+                      deliveryDate: demand.deliveryDate,
+                      requirements: [],
+                      dependsOnTaskIds: [],
+                    },
+                    controller.signal,
+                    onUnauthorized,
+                  );
+                  tasks = [createdTaskRes.task];
+                } catch {
+                  // Segue sem falha
+                }
+              }
               for (const t of tasks) {
                 const assigneeName = userNames.get(t.assignedToUserId);
                 const pausePendingReason = t.pauseRequestedAt
@@ -340,7 +362,7 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
         }
       }
     },
-    [hasUsersRead, onUnauthorized, session.user.id, session.user.name],
+    [hasUsersRead, onUnauthorized, session.permissions, session.user.id, session.user.name],
   );
 
   useEffect(() => {
@@ -380,7 +402,7 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
     if (!taskId || targetColumn === currentColumn || movingTaskId === taskId) return;
 
     const columnTitles: Record<KanbanColumnKey, string> = {
-      tasks: 'Tarefas',
+      tasks: 'Demandas',
       in_production: 'Em andamento',
       in_review: 'Em análise',
       completed: 'Concluído',
@@ -685,13 +707,13 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
                   type="button"
                   className={`kanban-quick-pill ${kanbanQuickFilter === 'mine' ? 'active' : ''}`}
                   onClick={() => setKanbanQuickFilter((curr) => (curr === 'mine' ? 'all' : 'mine'))}
-                  title="Ver apenas tarefas atribuídas a você"
+                  title="Ver apenas demandas atribuídas a você"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                     <circle cx="12" cy="7" r="4" />
                   </svg>
-                  <span>Minhas tarefas</span>
+                  <span>Minhas demandas</span>
                   <span className="quick-pill-badge">{myTasksCount}</span>
                 </button>
               )}
@@ -701,7 +723,7 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
                   type="button"
                   className={`kanban-quick-pill pill-danger ${kanbanQuickFilter === 'overdue' ? 'active' : ''}`}
                   onClick={() => setKanbanQuickFilter((curr) => (curr === 'overdue' ? 'all' : 'overdue'))}
-                  title="Filtrar tarefas atrasadas"
+                  title="Filtrar demandas atrasadas"
                 >
                   <span className="quick-pill-dot danger" aria-hidden="true" />
                   <span>Atrasadas</span>
@@ -714,7 +736,7 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
                   type="button"
                   className={`kanban-quick-pill pill-warning ${kanbanQuickFilter === 'dueToday' ? 'active' : ''}`}
                   onClick={() => setKanbanQuickFilter((curr) => (curr === 'dueToday' ? 'all' : 'dueToday'))}
-                  title="Filtrar tarefas que vencem hoje"
+                  title="Filtrar demandas que vencem hoje"
                 >
                   <span className="quick-pill-dot warning" aria-hidden="true" />
                   <span>Vencem hoje</span>
@@ -727,7 +749,7 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
                   type="button"
                   className={`kanban-quick-pill pill-urgent ${kanbanQuickFilter === 'urgent' ? 'active' : ''}`}
                   onClick={() => setKanbanQuickFilter((curr) => (curr === 'urgent' ? 'all' : 'urgent'))}
-                  title="Filtrar tarefas com prioridade urgente"
+                  title="Filtrar demandas com prioridade urgente"
                 >
                   <span className="quick-pill-dot urgent" aria-hidden="true" />
                   <span>Urgentes</span>
@@ -738,7 +760,7 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
 
             <div className="kanban-stat-counter">
               <span>
-                Exibindo <strong>{filteredTasks.length}</strong> de <strong>{allTasks.length}</strong> tarefas
+                Exibindo <strong>{filteredTasks.length}</strong> de <strong>{allTasks.length}</strong> demandas
               </span>
             </div>
           </div>
@@ -752,7 +774,7 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
               <input
                 type="text"
                 className="kanban-search-input"
-                placeholder="Buscar tarefa, cliente, chamado…"
+                placeholder="Buscar demanda, cliente, responsável…"
                 aria-label="Buscar cartões do Kanban"
                 value={kanbanSearch}
                 onChange={(e) => setKanbanSearch(e.target.value)}
@@ -990,8 +1012,8 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
                                 {item.client.name}
                               </span>
 
-                              {item.demandTitle && (
-                                <span className="kanban-card-demand-tag" title={`Chamado: ${item.demandTitle}`}>
+                              {item.demandTitle && item.demandTitle !== item.title && (
+                                <span className="kanban-card-demand-tag" title={`Demanda: ${item.demandTitle}`}>
                                   {item.demandTitle}
                                 </span>
                               )}
