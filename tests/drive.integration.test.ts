@@ -23,6 +23,11 @@ function testDatabaseUrl(key: string, expectedRole: string): string {
   return value;
 }
 
+type FakeItem = {
+  Path: string; Name: string; Size: number; IsDir: boolean; ID: string;
+  MimeType?: string; ModTime?: string; Hashes?: { md5?: string };
+};
+
 /** Drive em memória: caminho -> conteúdo, com IDs estáveis e MD5 como o rclone devolve. */
 class FakeDrive implements DriveGateway {
   files = new Map<string, { id: string; data: Buffer; mime: string }>();
@@ -31,7 +36,7 @@ class FakeDrive implements DriveGateway {
   }
   async list(dir: string, options: { recurse?: boolean; hashes?: boolean } = {}) {
     const prefix = dir ? `${dir}/` : '';
-    const out = new Map<string, ReturnType<FakeDrive['item']>>();
+    const out = new Map<string, FakeItem>();
     for (const [filePath, file] of this.files) {
       if (!filePath.startsWith(prefix)) continue;
       const rest = filePath.slice(prefix.length);
@@ -45,7 +50,7 @@ class FakeDrive implements DriveGateway {
     }
     return [...out.values()];
   }
-  private item(relPath: string, name: string, file: { id: string; data: Buffer; mime: string }, hashes?: boolean) {
+  private item(relPath: string, name: string, file: { id: string; data: Buffer; mime: string }, hashes?: boolean): FakeItem {
     return {
       Path: relPath, Name: name, Size: file.data.length, MimeType: file.mime, ModTime: '2026-10-19T12:00:00Z', IsDir: false, ID: file.id,
       ...(hashes ? { Hashes: { md5: createHash('md5').update(file.data).digest('hex') } } : {}),
@@ -59,9 +64,9 @@ class FakeDrive implements DriveGateway {
       const start = Number(match[1]);
       const end = match[2] ? Number(match[2]) : file.data.length - 1;
       const part = file.data.subarray(start, end + 1);
-      return new Response(part, { status: 206, headers: { 'content-length': String(part.length), 'content-range': `bytes ${start}-${end}/${file.data.length}` } });
+      return new Response(new Uint8Array(part), { status: 206, headers: { 'content-length': String(part.length), 'content-range': `bytes ${start}-${end}/${file.data.length}` } });
     }
-    return new Response(file.data, { status: 200, headers: { 'content-length': String(file.data.length) } });
+    return new Response(new Uint8Array(file.data), { status: 200, headers: { 'content-length': String(file.data.length) } });
   }
   async upload(dir: string, fileName: string, localPath: string) {
     this.add(`${dir}/${fileName}`, await readFile(localPath), fileName.endsWith('.jpg') ? 'image/jpeg' : 'application/octet-stream');
