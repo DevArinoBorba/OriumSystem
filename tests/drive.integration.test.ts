@@ -42,7 +42,8 @@ class FakeDrive implements DriveGateway {
       const rest = filePath.slice(prefix.length);
       const parts = rest.split('/');
       if (parts.length === 1 || options.recurse) {
-        out.set(rest, this.item(rest, parts.at(-1)!, file, options.hashes));
+        // Como o rclone rc: Path sempre relativo à raiz do remote, não à pasta listada.
+        out.set(rest, this.item(filePath, parts.at(-1)!, file, options.hashes));
       }
       if (!options.recurse && parts.length > 1) {
         out.set(parts[0]!, { Path: parts[0]!, Name: parts[0]!, Size: -1, IsDir: true, ID: `dir-${parts[0]}` });
@@ -265,7 +266,7 @@ describe('Espelho do Google Drive (Materiais) contra PostgreSQL orium_test', () 
     const dup = await post('/api/v1/drive/upload/complete', adminCookie, { uploadId: again, folder: LOTE, fileName: 'copia.jpg', subject: 'Anúncios site', numbered: true });
     expect(dup.statusCode).toBe(200);
     expect(dup.json().uploaded).toHaveLength(0);
-    expect(dup.json().duplicates[0].existingPath).toContain('anuncios-site_01.jpg');
+    expect(dup.json().duplicates[0].existingPath).toBe(`${LOTE}/${agencyToday()}_anuncios-site_01.jpg`);
 
     // Pasta fora do padrão (raiz do cliente) e colaborador: recusados.
     const bad = randomUUID();

@@ -218,13 +218,16 @@ def remote_names(remote_dir: str) -> set[str]:
     res = run_rclone(["lsf", "--files-only", remote_dir], check=False)
     return {line.strip() for line in res.stdout.splitlines() if line.strip()}
 
-def drive_url(remote_path: str) -> str:
-    """Link pelo ID do arquivo: abre para quem já tem acesso ao Drive, sem torná-lo público."""
+def drive_file_id(remote_path: str) -> str:
     res = run_rclone(["lsjson", "--stat", remote_path], check=False)
     try:
-        file_id = json.loads(res.stdout).get("ID")
+        return json.loads(res.stdout).get("ID") or ""
     except Exception:
-        file_id = None
+        return ""
+
+def drive_url(remote_path: str) -> str:
+    """Link pelo ID do arquivo: abre para quem já tem acesso ao Drive, sem torná-lo público."""
+    file_id = drive_file_id(remote_path)
     return f"https://drive.google.com/file/d/{file_id}/view" if file_id else ""
 
 def fail(message: str, **extra) -> None:
@@ -301,8 +304,10 @@ def main():
                  uploaded_before_failure=uploaded, duplicates=duplicates)
         if digest in known:
             existing = known[digest]
+            existing_id = drive_file_id(f"{RCLONE_REMOTE}/{client_name}/{existing}")
             duplicates.append({"local": str(path), "already_in_drive": f"Agent/{client_name}/{existing}",
-                               "drive_url": drive_url(f"{RCLONE_REMOTE}/{client_name}/{existing}")})
+                               "drive_file_id": existing_id, "relative_path": f"{client_name}/{existing}",
+                               "drive_url": f"https://drive.google.com/file/d/{existing_id}/view" if existing_id else ""})
             schedule_local_cleanup(path)
             continue
         ext = path.suffix.lower() or ".jpg"
@@ -323,8 +328,10 @@ def main():
         taken.add(dest_name)
         known[digest] = f"{rel_dir.split('/', 1)[1]}/{dest_name}"
         rel_path = f"Agent/{rel_dir}/{dest_name}"
+        new_id = drive_file_id(f"{remote_dir}/{dest_name}")
         uploaded.append({"local": str(path), "file_name": dest_name, "drive_path": rel_path,
-                         "drive_url": drive_url(f"{remote_dir}/{dest_name}")})
+                         "drive_file_id": new_id, "relative_path": f"{rel_dir}/{dest_name}",
+                         "drive_url": f"https://drive.google.com/file/d/{new_id}/view" if new_id else ""})
         log_to_obsidian(client_name, category_name, dest_name, rel_path)
         schedule_local_cleanup(path)
 

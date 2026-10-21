@@ -80,9 +80,15 @@ Se os arquivos são para uma **tarefa ou demanda**, registre **cada arquivo envi
 /usr/local/bin/orium-agent add-material <<'JSON'
 {"actor":"<email de quem pediu>","clientId":"<id>","demandId":"<id>","taskId":"<id>",
  "title":"Anúncios site 01","category":"drive","url":"<drive_url>",
+ "driveFileId":"<drive_file_id>","drivePath":"<relative_path>",
  "description":"Foto enviada por <pessoa> no WhatsApp em <data>."}
 JSON
 ```
+
+- **Sempre** envie `driveFileId` e `drivePath` (vêm de cada item em `uploaded` ou `duplicates_skipped`). Com eles:
+  - o arquivo aparece na página **Materiais** do sistema;
+  - o **responsável pela tarefa** vê, baixa e marca como publicado em "Meus arquivos";
+  - o arquivo já entra como **"a publicar"**.
 
 - `title`: o assunto + número (`Anúncios site 01`), igual à ordem do Drive.
 - `category`: `drive` para arquivos no Drive. Logo/manual da marca → `brand`.

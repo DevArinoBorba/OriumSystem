@@ -16,7 +16,7 @@ import type { AppRoute } from './router.js';
 import type { ActiveTab, MaterialNavigationTarget } from './types.js';
 
 // Telas menos frequentes carregam sob demanda para reduzir o bundle inicial.
-const MaterialsView = lazy(() => import('./components/MaterialsView.js').then((m) => ({ default: m.MaterialsView })));
+const MaterialsPage = lazy(() => import('./components/MaterialsPage.js').then((m) => ({ default: m.MaterialsPage })));
 const MobileAppView = lazy(() => import('./components/MobileAppView.js').then((m) => ({ default: m.MobileAppView })));
 const NotificationsView = lazy(() =>
   import('./components/NotificationsView.js').then((m) => ({ default: m.NotificationsView })),
@@ -488,7 +488,7 @@ export function App() {
         )}
 
         {activeTab === 'materials' && hasMaterialsRead && (
-          <MaterialsView
+          <MaterialsPage
             session={session}
             onUnauthorized={handleUnauthorized}
             initialTarget={materialNavTarget}

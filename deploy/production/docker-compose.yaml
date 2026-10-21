@@ -61,6 +61,11 @@ services:
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+      # Espelho do Google Drive (Materiais): gateway rclone interno; vazio = espelho desligado.
+      DRIVE_GATEWAY_URL: http://drive-gateway:5572
+      DRIVE_GATEWAY_USER: orium
+      DRIVE_GATEWAY_PASSWORD: ${DRIVE_GATEWAY_PASSWORD:-}
+      DRIVE_GATEWAY_FS: "drive_mirror:"
     command: ["node", "dist/server.js"]
     depends_on:
       migrate:
@@ -73,6 +78,30 @@ services:
       timeout: 5s
       retries: 6
       start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  # Acesso ao Google Drive (pasta Agent/) para o espelho em Materiais. Só a API o alcança
+  # (rede interna); a rede "egress" existe apenas para ele falar com o Google.
+  drive-gateway:
+    image: rclone/rclone:1.68.2
+    restart: unless-stopped
+    command:
+      - rcd
+      - --rc-addr=:5572
+      - --rc-user=orium
+      - --rc-pass=${DRIVE_GATEWAY_PASSWORD:?Configure DRIVE_GATEWAY_PASSWORD}
+      - --rc-serve
+      - --config=/config/rclone/rclone.conf
+      - --cache-dir=/tmp/rclone
+    volumes:
+      - /var/lib/orium-drive:/config/rclone
+    networks:
+      - backend
+      - egress
     logging:
       driver: json-file
       options:
@@ -113,6 +142,7 @@ services:
 networks:
   backend:
     internal: true
+  egress: {}
   coolify:
     external: true
     name: coolify

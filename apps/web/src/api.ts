@@ -1,4 +1,11 @@
 import {
+  driveListResponseSchema,
+  driveMyFilesResponseSchema,
+  driveUploadResponseSchema,
+  type DriveFileStatus,
+  type DriveListResponse,
+  type DriveMyFilesResponse,
+  type DriveUploadResponse,
   clientListResponseSchema,
   clientResponseSchema,
   clientTimelineResponseSchema,
@@ -958,4 +965,72 @@ export const api = {
       onUnauthorized,
       (raw) => bottlenecksReportResponseSchema.parse(raw),
     ),
+
+  // ================= Espelho do Google Drive (Agent/) =================
+
+  listDrive: (path: string, signal: AbortSignal, onUnauthorized: () => void): Promise<DriveListResponse> =>
+    request(
+      `/api/v1/drive/list?path=${encodeURIComponent(path)}`,
+      { method: 'GET', signal },
+      onUnauthorized,
+      (raw) => driveListResponseSchema.parse(raw),
+    ),
+
+  myDriveFiles: (signal: AbortSignal, onUnauthorized: () => void): Promise<DriveMyFilesResponse> =>
+    request('/api/v1/drive/my-files', { method: 'GET', signal }, onUnauthorized, (raw) => driveMyFilesResponseSchema.parse(raw)),
+
+  setDriveFileStatus: (
+    input: { fileId: string; status: DriveFileStatus | null },
+    signal: AbortSignal,
+    onUnauthorized: () => void,
+  ): Promise<{ fileId: string; status: DriveFileStatus | null }> =>
+    request(
+      '/api/v1/drive/status',
+      { method: 'POST', body: JSON.stringify(input), signal },
+      onUnauthorized,
+      (raw) => raw as { fileId: string; status: DriveFileStatus | null },
+    ),
+
+  linkDriveFile: (
+    input: { path: string; taskId: string },
+    signal: AbortSignal,
+    onUnauthorized: () => void,
+  ): Promise<{ material: Material }> =>
+    request(
+      '/api/v1/drive/link',
+      { method: 'POST', body: JSON.stringify(input), signal },
+      onUnauthorized,
+      (raw) => ({ material: materialSchema.parse((raw as { material: unknown }).material) }),
+    ),
+
+  uploadDriveChunk: (
+    uploadId: string,
+    index: number,
+    chunk: Blob,
+    signal: AbortSignal,
+    onUnauthorized: () => void,
+  ): Promise<{ received: number; bytes: number }> =>
+    request(
+      `/api/v1/drive/upload/chunk?uploadId=${uploadId}&index=${index}`,
+      { method: 'POST', body: chunk, headers: { 'Content-Type': 'application/octet-stream' }, signal },
+      onUnauthorized,
+      (raw) => raw as { received: number; bytes: number },
+    ),
+
+  completeDriveUpload: (
+    input: { uploadId: string; folder: string; fileName: string; subject?: string; numbered?: boolean },
+    signal: AbortSignal,
+    onUnauthorized: () => void,
+  ): Promise<DriveUploadResponse> =>
+    request(
+      '/api/v1/drive/upload/complete',
+      { method: 'POST', body: JSON.stringify(input), signal },
+      onUnauthorized,
+      (raw) => driveUploadResponseSchema.parse(raw),
+    ),
 };
+
+/** Endereço do arquivo do Drive servido pela API (visualizar ou baixar), com a sessão do usuário. */
+export function driveFileUrl(path: string, download = false): string {
+  return `/api/v1/drive/file?path=${encodeURIComponent(path)}${download ? '&download=1' : ''}`;
+}

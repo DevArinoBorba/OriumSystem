@@ -181,7 +181,8 @@ Se o horário calculado já passou, pergunte um novo horário.
    ```bash
    /usr/local/bin/orium-agent add-material <<'JSON'
    {"actor":"oriumdigitalrino@gmail.com","clientId":"<id>","demandId":"<id>","taskId":"<id>",
-    "title":"Anúncios site 01","category":"drive","url":"<drive_url>"}
+    "title":"Anúncios site 01","category":"drive","url":"<drive_url>",
+    "driveFileId":"<drive_file_id>","drivePath":"<relative_path>"}
    JSON
    ```
 8. **Lembrete**: `today {"at":"18:00"}` → use o `schedule` retornado (ex.: `in 340m`) no `cronjob_manage`:

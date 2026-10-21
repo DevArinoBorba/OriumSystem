@@ -437,7 +437,8 @@ export async function completeUpload(
     const known = await drive.list(client, { recurse: true, hashes: true });
     const duplicate = known.find((item) => !item.IsDir && item.Hashes?.md5 === digest);
     if (duplicate) {
-      return { uploaded: [], duplicates: [{ name: input.fileName, existingPath: `${client}/${duplicate.Path}` }] };
+      // Path do rclone é relativo à raiz do remote (Agent/), mesmo listando a pasta do cliente.
+      return { uploaded: [], duplicates: [{ name: input.fileName, existingPath: duplicate.Path }] };
     }
 
     const original = path.basename(input.fileName).replace(/[\\/:*?"<>|\u0000]/g, '-');
