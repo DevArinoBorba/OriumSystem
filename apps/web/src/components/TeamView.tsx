@@ -47,6 +47,11 @@ export function TeamView({ session, onUnauthorized }: TeamViewProps) {
   const [roleError, setRoleError] = useState<string | null>(null);
   const roleDialogRef = useRef<HTMLDialogElement>(null);
 
+  // Delete Confirmation Dialog State
+  const [userToDelete, setUserToDelete] = useState<UserListItem | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deleteDialogRef = useRef<HTMLDialogElement>(null);
+
   const activeRequestRef = useRef<AbortController | null>(null);
 
   const loadUsers = useCallback(async () => {
@@ -126,6 +131,22 @@ export function TeamView({ session, onUnauthorized }: TeamViewProps) {
       }
     }
   }, [userToChangeRole]);
+
+  // Native delete dialog lifecycle
+  useEffect(() => {
+    const dialog = deleteDialogRef.current;
+    if (!dialog) return;
+    if (userToDelete) {
+      setDeleteError(null);
+      if (!dialog.open) {
+        dialog.showModal();
+      }
+    } else {
+      if (dialog.open) {
+        dialog.close();
+      }
+    }
+  }, [userToDelete]);
 
   function openCreatePanel() {
     setNewName('');
@@ -255,6 +276,34 @@ export function TeamView({ session, onUnauthorized }: TeamViewProps) {
         setRoleError('Você não tem permissão para alterar papéis de usuários.');
       } else {
         setRoleError('Não foi possível alterar o papel do usuário. Tente novamente.');
+      }
+    } finally {
+      isActionBusyRef.current = false;
+      setActionBusy(false);
+    }
+  }
+
+  async function handleDeleteConfirm() {
+    if (isActionBusyRef.current || !userToDelete) return;
+    isActionBusyRef.current = true;
+    setActionBusy(true);
+    setDeleteError(null);
+
+    const controller = new AbortController();
+    try {
+      await api.deleteUser(userToDelete.id, controller.signal, onUnauthorized);
+      showToast(`Colaborador "${userToDelete.name}" excluído com sucesso.`);
+      setUserToDelete(null);
+      void loadUsers();
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'LAST_ADMINISTRATOR') {
+        setDeleteError('Operação recusada: não é possível excluir o último administrador do sistema.');
+      } else if (error instanceof ApiError && error.code === 'CANNOT_DELETE_SELF') {
+        setDeleteError('Operação recusada: você não pode excluir sua própria conta.');
+      } else if (error instanceof ApiError && error.status === 403) {
+        setDeleteError('Você não tem permissão para excluir este colaborador.');
+      } else {
+        setDeleteError('Não foi possível excluir o colaborador. Tente novamente.');
       }
     } finally {
       isActionBusyRef.current = false;
@@ -460,6 +509,36 @@ export function TeamView({ session, onUnauthorized }: TeamViewProps) {
                             Desativar
                           </button>
                         )}
+                        {hasDeactivate && u.id !== session.user.id && (
+                          <button
+                            type="button"
+                            className="action-btn icon-trash"
+                            onClick={() => {
+                              setDeleteError(null);
+                              setUserToDelete(u);
+                            }}
+                            disabled={actionBusy}
+                            title="Excluir colaborador"
+                            aria-label={`Excluir ${u.name}`}
+                          >
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              aria-hidden="true"
+                            >
+                              <polyline points="3 6 5 6 21 6" />
+                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                              <line x1="10" y1="11" x2="10" y2="17" />
+                              <line x1="14" y1="11" x2="14" y2="17" />
+                            </svg>
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -620,6 +699,78 @@ export function TeamView({ session, onUnauthorized }: TeamViewProps) {
             disabled={actionBusy}
           >
             {actionBusy ? 'Alterando…' : 'Confirmar alteração'}
+          </button>
+        </div>
+      </dialog>
+
+      {/* Native Dialog for Delete User Confirmation */}
+      <dialog
+        ref={deleteDialogRef}
+        className="native-dialog"
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            if (!isActionBusyRef.current) {
+              setUserToDelete(null);
+              setDeleteError(null);
+            }
+          }
+        }}
+        onCancel={(event) => {
+          event.preventDefault();
+          if (!actionBusy) {
+            setUserToDelete(null);
+            setDeleteError(null);
+          }
+        }}
+      >
+        <div className="dialog-header">
+          <h2>Excluir colaborador</h2>
+          <button
+            type="button"
+            className="close-button"
+            onClick={() => {
+              setUserToDelete(null);
+              setDeleteError(null);
+            }}
+            aria-label="Cancelar exclusão"
+            disabled={actionBusy}
+          >
+            ✕
+          </button>
+        </div>
+        <div className="dialog-body">
+          {deleteError && (
+            <div className="alert-banner error" role="alert" style={{ marginBottom: 12 }}>
+              <span>{deleteError}</span>
+            </div>
+          )}
+          <p>
+            Deseja realmente excluir permanentemente o colaborador <strong>&ldquo;{userToDelete?.name}&rdquo;</strong>?
+          </p>
+          <p className="muted-text">
+            O acesso do colaborador será removido definitivamente do sistema.
+          </p>
+        </div>
+        <div className="dialog-actions">
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => {
+              setUserToDelete(null);
+              setDeleteError(null);
+            }}
+            disabled={actionBusy}
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="danger-button"
+            onClick={() => void handleDeleteConfirm()}
+            disabled={actionBusy}
+          >
+            {actionBusy ? 'Excluindo…' : 'Sim, excluir colaborador'}
           </button>
         </div>
       </dialog>

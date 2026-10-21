@@ -59,6 +59,7 @@ import {
   changeIdentity,
   changeOwnPassword,
   changeRolePermissions,
+  deleteUser,
   listUsers,
   provisionUser,
   publicIdentity,
@@ -376,6 +377,13 @@ export async function buildApp({ config, database, logger, driveGateway }: Optio
     const params = z.object({ id: z.string().uuid() }).parse(request.params);
     const input = deactivateUserSchema.parse(request.body);
     await changeIdentity(database, identity.user.id, params.id, input);
+    return { success: true };
+  });
+  app.delete('/api/v1/users/:id', async (request) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'users.deactivate');
+    const params = z.object({ id: z.string().trim().min(1) }).parse(request.params);
+    await deleteUser(database, identity.user.id, params.id);
     return { success: true };
   });
   app.put('/api/v1/users/:id/role', async (request) => {

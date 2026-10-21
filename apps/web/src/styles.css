@@ -1367,6 +1367,26 @@ button:disabled {
 }
 
 /* ==========================================================================
+.action-btn.icon-trash {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  min-height: 32px;
+  padding: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.action-btn.icon-trash:hover:not(:disabled) {
+  background: var(--color-danger-light);
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
+/* ==========================================================================
    Pagination & Empty States
    ========================================================================== */
 

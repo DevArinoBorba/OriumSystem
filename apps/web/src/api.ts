@@ -392,6 +392,18 @@ export const api = {
       parseSuccessResponse,
     ),
 
+  deleteUser: (
+    id: string,
+    signal: AbortSignal,
+    onUnauthorized: () => void,
+  ): Promise<{ success: boolean }> =>
+    request(
+      `/api/v1/users/${id}`,
+      { method: 'DELETE', body: '{}', signal },
+      onUnauthorized,
+      parseSuccessResponse,
+    ),
+
   // ================= Fase 3 — Demandas =================
 
   listDemands: (
@@ -471,7 +483,7 @@ export const api = {
   ): Promise<{ ok: boolean; id: string }> =>
     request(
       `/api/v1/demands/${id}`,
-      { method: 'DELETE', signal },
+      { method: 'DELETE', body: '{}', signal },
       onUnauthorized,
       (raw) => raw as { ok: boolean; id: string },
     ),

@@ -356,3 +356,79 @@ export async function changeOwnPassword(
     }
   });
 }
+
+export async function deleteUser(
+  database: Database,
+  actorId: string,
+  targetId: string,
+): Promise<void> {
+  return serializeIdentity(database, async () => {
+    const client = await database.pool.connect();
+    let inTransaction = false;
+    try {
+      await client.query('BEGIN');
+      inTransaction = true;
+      await client.query('SELECT pg_advisory_xact_lock($1)', [IDENTITY_LOCK]);
+
+      if (actorId === targetId) throw new AppError(400, 'CANNOT_DELETE_SELF');
+
+      const actor = await client.query(
+        `SELECT 1 FROM auth_user u JOIN user_role r ON r.user_id = u.id WHERE u.id = $1 AND u.active AND r.role_id = 'administrator'`,
+        [actorId],
+      );
+      if (!actor.rowCount) throw new AppError(403, 'FORBIDDEN');
+
+      const target = await client.query<{ id: string; active: boolean; role_id: string | null }>(
+        `SELECT u.id, u.active, ur.role_id
+         FROM auth_user u
+         LEFT JOIN user_role ur ON ur.user_id = u.id
+         WHERE u.id = $1
+         FOR UPDATE OF u`,
+        [targetId],
+      );
+      const current = target.rows[0];
+      if (!current) throw new AppError(404, 'USER_NOT_FOUND');
+
+      if (current.active && current.role_id === 'administrator') {
+        const admins = await client.query<{ id: string }>(
+          `SELECT u.id
+           FROM auth_user u
+           JOIN user_role ur ON ur.user_id = u.id
+           WHERE u.active = TRUE AND ur.role_id = 'administrator'
+           FOR UPDATE OF u`,
+        );
+        if ((admins.rowCount ?? 0) <= 1) throw new AppError(409, 'LAST_ADMINISTRATOR');
+      }
+
+      // Reassign historical/operational references that use RESTRICT or NO ACTION
+      await client.query('UPDATE client_team_member SET assigned_by_user_id = $2 WHERE assigned_by_user_id = $1', [targetId, actorId]);
+      await client.query('UPDATE demand SET created_by_user_id = $2 WHERE created_by_user_id = $1', [targetId, actorId]);
+      await client.query('UPDATE task SET assigned_to_user_id = $2 WHERE assigned_to_user_id = $1', [targetId, actorId]);
+      await client.query('UPDATE task_comment SET author_id = $2 WHERE author_id = $1', [targetId, actorId]);
+      await client.query('UPDATE demand_event SET actor_id = $2 WHERE actor_id = $1', [targetId, actorId]);
+      await client.query('UPDATE material SET created_by_user_id = $2 WHERE created_by_user_id = $1', [targetId, actorId]);
+      await client.query('UPDATE material_event SET actor_id = $2 WHERE actor_id = $1', [targetId, actorId]);
+      await client.query('UPDATE drive_file_status SET updated_by_user_id = $2 WHERE updated_by_user_id = $1', [targetId, actorId]);
+
+      const revoked = await client.query('DELETE FROM auth_session WHERE user_id = $1', [targetId]);
+      const revokedCount = revoked.rowCount ?? 0;
+
+      await recordIdentityEvent(
+        client,
+        { action: 'user_deactivated', actorId, targetUserId: targetId, previousActive: current.active, revokedCount },
+        [targetId],
+      );
+      await client.query('DELETE FROM auth_user WHERE id = $1', [targetId]);
+
+      await client.query('COMMIT');
+      inTransaction = false;
+    } catch (error) {
+      if (inTransaction) {
+        try { await client.query('ROLLBACK'); } catch { /* connection already broken */ }
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  });
+}
