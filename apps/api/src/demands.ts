@@ -1622,3 +1622,194 @@ export async function createTaskComment(
     dbClient.release();
   }
 }
+
+export type KanbanMoveTargetColumn = 'tasks' | 'in_production' | 'in_review' | 'completed';
+
+export async function moveTaskKanban(
+  database: Database,
+  identity: SessionResponse,
+  taskId: string,
+  input: { column: KanbanMoveTargetColumn },
+): Promise<TaskResponse> {
+  const dbClient = await database.pool.connect();
+  try {
+    await dbClient.query('BEGIN');
+    await dbClient.query('SELECT pg_advisory_xact_lock($1)', [IDENTITY_LOCK]);
+
+    const actor = await revalidateActorInsideTransaction(
+      dbClient,
+      identity.user.id,
+      (role) => (role === 'administrator' ? 'tasks.manage' : 'tasks.execute'),
+    );
+
+    const initialCheck = await dbClient.query<{ demand_id: string }>(`SELECT demand_id FROM task WHERE id = $1`, [taskId]);
+    if (!initialCheck.rows[0]) throw new AppError(404, 'NOT_FOUND');
+
+    await dbClient.query(`SELECT id FROM demand WHERE id = $1 FOR UPDATE`, [initialCheck.rows[0].demand_id]);
+
+    const taskRes = await dbClient.query<TaskRow>(`
+      SELECT * FROM task WHERE id = $1 FOR UPDATE
+    `, [taskId]);
+    const taskRow = taskRes.rows[0];
+    if (!taskRow) throw new AppError(404, 'NOT_FOUND');
+
+    if (actor.role !== 'administrator' && taskRow.assigned_to_user_id !== actor.id) {
+      throw new AppError(403, 'FORBIDDEN');
+    }
+
+    // Se colaborador arrastar para Concluído, exige permissão de administrador (ou envia para revisão)
+    const targetColumn: KanbanMoveTargetColumn =
+      input.column === 'completed' && actor.role !== 'administrator'
+        ? 'in_review'
+        : input.column;
+
+    let updateRes: { rows: TaskRow[] };
+
+    if (targetColumn === 'in_production') {
+      const { ready, allRequirementsSatisfied, allDependenciesCompleted } = await evaluateTaskReadiness(dbClient, taskId);
+      if (!allRequirementsSatisfied) throw new AppError(400, 'MANDATORY_REQUIREMENTS_UNSATISFIED');
+      if (!allDependenciesCompleted) throw new AppError(400, 'DEPENDENCIES_UNCOMPLETED');
+      if (!ready) throw new AppError(400, 'TASK_NOT_READY');
+
+      updateRes = await dbClient.query<TaskRow>(`
+        UPDATE task
+        SET status = 'in_production',
+            accepted_at = COALESCE(accepted_at, now()),
+            ready_at = COALESCE(ready_at, now()),
+            started_at = COALESCE(started_at, now()),
+            completed_at = NULL,
+            pause_requested_at = NULL,
+            pause_reason = NULL,
+            paused_at = NULL,
+            version = version + 1,
+            updated_at = now()
+        WHERE id = $1
+        RETURNING *
+      `, [taskId]);
+
+      await recordDemandEvent(dbClient, `
+        INSERT INTO demand_event (id, demand_id, task_id, actor_id, actor_name, action, reason, metadata)
+        VALUES ($1, $2, $3, $4, $5, $6, NULL, '{}'::jsonb)
+      `, [
+        randomUUID(),
+        taskRow.demand_id,
+        taskId,
+        actor.id,
+        actor.name,
+        taskRow.status === 'paused' ? 'task_resumed' : 'task_started',
+      ], {});
+    } else if (targetColumn === 'in_review') {
+      updateRes = await dbClient.query<TaskRow>(`
+        UPDATE task
+        SET status = 'in_review',
+            accepted_at = COALESCE(accepted_at, now()),
+            ready_at = COALESCE(ready_at, now()),
+            started_at = COALESCE(started_at, now()),
+            completed_at = NULL,
+            pause_requested_at = NULL,
+            pause_reason = NULL,
+            paused_at = NULL,
+            delivery_notes = COALESCE(delivery_notes, 'Enviada para análise via quadro Kanban'),
+            version = version + 1,
+            updated_at = now()
+        WHERE id = $1
+        RETURNING *
+      `, [taskId]);
+
+      await recordDemandEvent(dbClient, `
+        INSERT INTO demand_event (id, demand_id, task_id, actor_id, actor_name, action, reason, metadata)
+        VALUES ($1, $2, $3, $4, $5, 'task_review_submitted', NULL, $6)
+      `, [
+        randomUUID(),
+        taskRow.demand_id,
+        taskId,
+        actor.id,
+        actor.name,
+        JSON.stringify({ deliveryNotes: 'Enviada para análise via quadro Kanban', previewUrl: taskRow.preview_url }),
+      ], {});
+    } else if (targetColumn === 'completed') {
+      updateRes = await dbClient.query<TaskRow>(`
+        UPDATE task
+        SET status = 'completed',
+            accepted_at = COALESCE(accepted_at, now()),
+            ready_at = COALESCE(ready_at, now()),
+            started_at = COALESCE(started_at, now()),
+            completed_at = now(),
+            pause_requested_at = NULL,
+            pause_reason = NULL,
+            paused_at = NULL,
+            version = version + 1,
+            updated_at = now()
+        WHERE id = $1
+        RETURNING *
+      `, [taskId]);
+
+      await recordDemandEvent(dbClient, `
+        INSERT INTO demand_event (id, demand_id, task_id, actor_id, actor_name, action, reason, metadata)
+        VALUES ($1, $2, $3, $4, $5, 'task_completed', 'Concluída via quadro Kanban', '{}'::jsonb)
+      `, [randomUUID(), taskRow.demand_id, taskId, actor.id, actor.name], {});
+
+      const dependentsRes = await dbClient.query<{ task_id: string }>(`
+        SELECT task_id FROM task_dependency WHERE depends_on_task_id = $1
+      `, [taskId]);
+
+      for (const dep of dependentsRes.rows) {
+        const depTaskRes = await dbClient.query<{ id: string; status: string }>(`
+          SELECT id, status FROM task WHERE id = $1 FOR UPDATE
+        `, [dep.task_id]);
+        const depTask = depTaskRes.rows[0];
+        if (depTask && depTask.status === 'blocked') {
+          const { ready } = await evaluateTaskReadiness(dbClient, dep.task_id);
+          if (ready) {
+            await dbClient.query(`
+              UPDATE task
+              SET status = 'ready', ready_at = now(), version = version + 1, updated_at = now()
+              WHERE id = $1
+            `, [dep.task_id]);
+
+            await recordDemandEvent(dbClient, `
+              INSERT INTO demand_event (id, demand_id, task_id, actor_id, actor_name, action, reason, metadata)
+              VALUES ($1, $2, $3, $4, $5, 'task_ready', NULL, '{}'::jsonb)
+            `, [randomUUID(), taskRow.demand_id, dep.task_id, actor.id, actor.name], {});
+          }
+        }
+      }
+    } else {
+      // targetColumn === 'tasks' (Em aberto)
+      const { ready } = await evaluateTaskReadiness(dbClient, taskId);
+      const nextStatus: TaskStatus = !ready
+        ? 'blocked'
+        : taskRow.status === 'in_review' || taskRow.status === 'completed'
+          ? 'changes_requested'
+          : 'ready';
+
+      updateRes = await dbClient.query<TaskRow>(`
+        UPDATE task
+        SET status = $2,
+            ready_at = CASE WHEN $2 = 'ready' THEN COALESCE(ready_at, now()) ELSE ready_at END,
+            completed_at = NULL,
+            pause_requested_at = NULL,
+            pause_reason = NULL,
+            paused_at = NULL,
+            version = version + 1,
+            updated_at = now()
+        WHERE id = $1
+        RETURNING *
+      `, [taskId, nextStatus]);
+
+      const eventAction = nextStatus === 'changes_requested' ? 'task_changes_requested' : 'task_ready';
+      await recordDemandEvent(dbClient, `
+        INSERT INTO demand_event (id, demand_id, task_id, actor_id, actor_name, action, reason, metadata)
+        VALUES ($1, $2, $3, $4, $5, $6, 'Retornada para Tarefas via quadro Kanban', '{}'::jsonb)
+      `, [randomUUID(), taskRow.demand_id, taskId, actor.id, actor.name, eventAction], {});
+    }
+
+    await dbClient.query('COMMIT');
+    return { task: safeFormatTask(updateRes.rows[0]) };
+  } catch (err) {
+    await dbClient.query('ROLLBACK');
+    throw err;
+  } finally {
+    dbClient.release();
+  }
+}

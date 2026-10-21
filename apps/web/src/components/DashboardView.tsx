@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { DashboardItem, DashboardResponse, SessionResponse } from '@orium/contracts';
+import type { DashboardItem, DashboardResponse, Demand, SessionResponse } from '@orium/contracts';
 import { api, ApiError } from '../api.js';
+import { showToast } from './Toasts.js';
 import { formatCalendarDate, queueWait, relativeDeadline } from '../dates.js';
 import type { DashboardSectionKey } from '../types.js';
 
@@ -15,11 +16,11 @@ const DAY_LIMIT = 20;
 const taskStatusLabels: Record<string, string> = {
   blocked: 'Aguardando',
   ready: 'Pronta',
-  in_production: 'Em produção',
-  in_review: 'Em revisão',
+  in_production: 'Em andamento',
+  in_review: 'Em análise',
   changes_requested: 'Ajustes pedidos',
   paused: 'Pausada',
-  completed: 'Concluída',
+  completed: 'Concluído',
 };
 
 const priorityLabels: Record<string, string> = {
@@ -65,7 +66,7 @@ type SectionMeta = {
   key: DashboardSectionKey;
   title: string;
   description: string;
-  headline: string; // verb/noun used to describe a single item
+  headline: string;
   kindNote?: boolean;
 };
 
@@ -121,103 +122,74 @@ type DashboardViewMode = 'list' | 'kanban';
 
 type KanbanQuickFilter = 'all' | 'mine' | 'overdue' | 'dueToday' | 'urgent';
 
+type KanbanColumnKey = 'tasks' | 'in_production' | 'in_review' | 'completed';
+
 interface KanbanColumnMeta {
-  key: string;
+  key: KanbanColumnKey;
   title: string;
   subtitle: string;
   accentClass: string;
-  iconType: 'blocked' | 'ready' | 'production' | 'review' | 'changes' | 'paused';
-  statuses: string[];
 }
 
 const kanbanColumns: KanbanColumnMeta[] = [
   {
-    key: 'blocked',
-    title: 'Aguardando / Bloqueadas',
-    subtitle: 'Dependências, requisitos ou pausas',
-    accentClass: 'col-blocked',
-    iconType: 'blocked',
-    statuses: ['blocked', 'paused'],
-  },
-  {
-    key: 'ready',
-    title: 'Prontas para Iniciar',
-    subtitle: 'Requisitos atendidos p/ produção',
-    accentClass: 'col-ready',
-    iconType: 'ready',
-    statuses: ['ready'],
+    key: 'tasks',
+    title: 'Tarefas',
+    subtitle: 'Tudo o que está em aberto',
+    accentClass: 'col-tasks',
   },
   {
     key: 'in_production',
-    title: 'Em Produção',
-    subtitle: 'Relógio operacional em andamento',
-    accentClass: 'col-production',
-    iconType: 'production',
-    statuses: ['in_production'],
+    title: 'Em andamento',
+    subtitle: 'O que está produzindo',
+    accentClass: 'col-progress',
   },
   {
     key: 'in_review',
-    title: 'Em Revisão / Ajustes',
-    subtitle: 'Avaliação e refinamento de entrega',
-    accentClass: 'col-review',
-    iconType: 'review',
-    statuses: ['in_review', 'changes_requested'],
+    title: 'Em análise',
+    subtitle: 'Em revisão ou aguardando aprovação',
+    accentClass: 'col-analysis',
+  },
+  {
+    key: 'completed',
+    title: 'Concluído',
+    subtitle: 'Entregas aprovadas e finalizadas',
+    accentClass: 'col-completed',
   },
 ];
 
-function renderColumnIcon(type: KanbanColumnMeta['iconType']) {
-  switch (type) {
-    case 'blocked':
-      return (
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="10" />
-          <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
-        </svg>
-      );
-    case 'ready':
-      return (
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="10" />
-          <polyline points="12 6 12 12 16 14" />
-        </svg>
-      );
-    case 'production':
-      return (
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <polygon points="5 3 19 12 5 21 5 3" />
-        </svg>
-      );
-    case 'review':
-      return (
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-          <circle cx="12" cy="12" r="3" />
-        </svg>
-      );
-    case 'changes':
-      return (
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-        </svg>
-      );
-    case 'paused':
-      return (
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <rect x="6" y="4" width="4" height="16" />
-          <rect x="14" y="4" width="4" height="16" />
-        </svg>
-      );
+function isAwaitingApproval(item: DashboardItem): boolean {
+  if (item.status === 'in_review') return true;
+  if (!item.reason) return false;
+  const r = item.reason.toLowerCase();
+  return (
+    r.includes('solicitação de pausa pendente') ||
+    r.includes('aguardando avaliação') ||
+    r.includes('aguardando aprovação')
+  );
+}
+
+function classifyKanbanColumn(item: DashboardItem): KanbanColumnKey {
+  if (item.status === 'completed') {
+    return 'completed';
   }
+  if (isAwaitingApproval(item)) {
+    return 'in_review';
+  }
+  if (item.status === 'in_production') {
+    return 'in_production';
+  }
+  return 'tasks';
 }
 
 function getInitialDashboardViewMode(): DashboardViewMode {
-  if (typeof window === 'undefined') return 'list';
+  if (typeof window === 'undefined') return 'kanban';
   try {
-    const saved = localStorage.getItem('orium-dashboard-view');
-    return saved === 'kanban' ? 'kanban' : 'list';
+    const saved = localStorage.getItem('orium-dashboard-view-v2');
+    if (saved === 'list' || saved === 'kanban') return saved;
+    return 'kanban';
   } catch {
-    return 'list';
+    return 'kanban';
   }
 }
 
@@ -225,6 +197,7 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
   const isAdmin = session.roles.includes('administrator');
   const hasUsersRead = session.permissions.includes('users.read');
   const [data, setData] = useState<DashboardResponse | null>(null);
+  const [extraTasks, setExtraTasks] = useState<DashboardItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -234,13 +207,18 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
   const [kanbanAssigneeFilter, setKanbanAssigneeFilter] = useState<string>('all');
   const [kanbanPriorityFilter, setKanbanPriorityFilter] = useState<string>('all');
   const [kanbanQuickFilter, setKanbanQuickFilter] = useState<KanbanQuickFilter>('all');
+  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<KanbanColumnKey | null>(null);
+  const [movingTaskId, setMovingTaskId] = useState<string | null>(null);
+  const [columnOverrides, setColumnOverrides] = useState<Record<string, KanbanColumnKey>>({});
+  const dragSuppressClickRef = useRef(false);
   const hasDataRef = useRef(false);
   const requestRef = useRef<AbortController | null>(null);
 
   const handleSelectViewMode = (mode: DashboardViewMode) => {
     setViewMode(mode);
     try {
-      localStorage.setItem('orium-dashboard-view', mode);
+      localStorage.setItem('orium-dashboard-view-v2', mode);
     } catch {
       // Ignore storage error
     }
@@ -265,6 +243,81 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
           hasDataRef.current = true;
           setError(null);
         }
+
+        // Carrega todas as tarefas (incluindo concluídas e solicitações de aprovação) em paralelo para o Kanban
+        void (async () => {
+          try {
+            const [demandsRes, usersRes] = await Promise.all([
+              api.listDemands({ status: 'all', page: 1, pageSize: 30 }, controller.signal, onUnauthorized),
+              hasUsersRead
+                ? api.listUsers(controller.signal, onUnauthorized).catch(() => ({ users: [] }))
+                : Promise.resolve({ users: [] }),
+            ]);
+            if (controller.signal.aborted) return;
+
+            const userNames = new Map<string, string>();
+            for (const w of response.workload) {
+              userNames.set(w.userId, w.name);
+            }
+            for (const u of usersRes.users) {
+              userNames.set(u.id, u.name);
+            }
+            if (session.user?.id && session.user?.name) {
+              userNames.set(session.user.id, session.user.name);
+            }
+
+            const details = await Promise.all(
+              demandsRes.demands.slice(0, 25).map((d: Demand) =>
+                api
+                  .getDemand(d.id, controller.signal, onUnauthorized)
+                  .then((res) => ({ demand: res.demand, tasks: res.tasks }))
+                  .catch(() => null),
+              ),
+            );
+            if (controller.signal.aborted || requestRef.current !== controller) return;
+
+            const fetchedItems: DashboardItem[] = [];
+            for (const entry of details) {
+              if (!entry) continue;
+              const { demand, tasks } = entry;
+              for (const t of tasks) {
+                const assigneeName = userNames.get(t.assignedToUserId);
+                const pausePendingReason = t.pauseRequestedAt
+                  ? t.pauseReason
+                    ? `Solicitação de pausa pendente: ${t.pauseReason}`
+                    : 'Solicitação de pausa pendente de aprovação'
+                  : null;
+                fetchedItems.push({
+                  kind: 'task',
+                  id: t.id,
+                  title: t.title,
+                  demandId: demand.id,
+                  demandTitle: demand.title,
+                  client: {
+                    id: demand.client.id,
+                    name: demand.client.name,
+                  },
+                  status: t.status,
+                  priority: t.priority,
+                  deliveryDate: t.deliveryDate,
+                  taskId: t.id,
+                  startedAt: t.startedAt,
+                  readyAt: t.readyAt,
+                  reason: pausePendingReason,
+                  assignedTo: assigneeName
+                    ? { id: t.assignedToUserId, name: assigneeName }
+                    : t.assignedToUserId === session.user.id
+                      ? { id: session.user.id, name: session.user.name }
+                      : null,
+                });
+              }
+            }
+            setExtraTasks(fetchedItems);
+            setColumnOverrides({});
+          } catch {
+            // Falha secundária silenciosa; mantém itens principais do dashboard
+          }
+        })();
       } catch (err) {
         if (controller.signal.aborted || (err instanceof DOMException && err.name === 'AbortError')) return;
         if (requestRef.current === controller) {
@@ -274,7 +327,6 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
             hasDataRef.current = false;
             setError('Acesso ao Painel foi revogado. Atualize a página ou fale com um administrador.');
           } else if (hasDataRef.current) {
-            // mantém updatedAt anterior para o label de staleness
             setError('Não foi possível atualizar o Painel. Mostrando os dados da última atualização.');
           } else {
             setError('Não foi possível carregar o Painel. Tente novamente.');
@@ -288,7 +340,7 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
         }
       }
     },
-    [onUnauthorized],
+    [hasUsersRead, onUnauthorized, session.user.id, session.user.name],
   );
 
   useEffect(() => {
@@ -314,10 +366,62 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
   }, [load]);
 
   const handleOpen = (item: DashboardItem) => {
+    if (dragSuppressClickRef.current) return;
     if (item.kind === 'task') {
       onOpenItem({ demandId: item.demandId, taskId: item.taskId ?? item.id });
     } else {
       onOpenItem({ demandId: item.demandId });
+    }
+  };
+
+  const handleDropTask = async (taskId: string, targetColumn: KanbanColumnKey, currentColumn: KanbanColumnKey) => {
+    setDragOverColumn(null);
+    setDraggingTaskId(null);
+    if (!taskId || targetColumn === currentColumn || movingTaskId === taskId) return;
+
+    const columnTitles: Record<KanbanColumnKey, string> = {
+      tasks: 'Tarefas',
+      in_production: 'Em andamento',
+      in_review: 'Em análise',
+      completed: 'Concluído',
+    };
+
+    const effectiveColumn: KanbanColumnKey =
+      targetColumn === 'completed' && !isAdmin ? 'in_review' : targetColumn;
+
+    setColumnOverrides((prev) => ({ ...prev, [taskId]: effectiveColumn }));
+    setMovingTaskId(taskId);
+
+    const controller = new AbortController();
+    try {
+      await api.moveTaskKanban(taskId, { column: effectiveColumn }, controller.signal, onUnauthorized);
+      if (targetColumn === 'completed' && !isAdmin) {
+        showToast('Tarefa enviada para "Em análise" (aprovação do administrador).');
+      } else {
+        showToast(`Tarefa movida para "${columnTitles[effectiveColumn]}".`);
+      }
+      void load(true);
+    } catch (err) {
+      setColumnOverrides((prev) => {
+        const next = { ...prev };
+        delete next[taskId];
+        return next;
+      });
+      if (err instanceof ApiError) {
+        if (err.code === 'MANDATORY_REQUIREMENTS_UNSATISFIED') {
+          showToast('Não é possível iniciar: há requisitos obrigatórios pendentes nesta tarefa.');
+        } else if (err.code === 'DEPENDENCIES_UNCOMPLETED') {
+          showToast('Não é possível iniciar: há tarefas dependentes ainda não concluídas.');
+        } else if (err.status === 403) {
+          showToast('Você só pode mover tarefas atribuídas a você.');
+        } else {
+          showToast('Não foi possível mover a tarefa. Tente novamente.');
+        }
+      } else {
+        showToast('Não foi possível mover a tarefa. Tente novamente.');
+      }
+    } finally {
+      setMovingTaskId(null);
     }
   };
 
@@ -454,7 +558,7 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
   const renderKanbanBoard = () => {
     if (!data) return null;
 
-    // Consolidar tarefas únicas de todas as seções do Painel preservando reason (se houver em awaitingAction)
+    // Consolidar tarefas únicas de todas as seções do Painel + tarefas extras (incluindo Concluído)
     const tasksById = new Map<string, DashboardItem>();
     const allSectionKeys: DashboardSectionKey[] = [
       'awaitingAction',
@@ -478,6 +582,20 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
       }
     }
 
+    for (const item of extraTasks) {
+      if (item.kind !== 'task') continue;
+      const existing = tasksById.get(item.id);
+      if (!existing) {
+        tasksById.set(item.id, item);
+      } else {
+        tasksById.set(item.id, {
+          ...existing,
+          reason: existing.reason ?? item.reason,
+          assignedTo: existing.assignedTo ?? item.assignedTo,
+        });
+      }
+    }
+
     const allTasks = Array.from(tasksById.values());
 
     // Extrair lista única de responsáveis presentes ou do workload
@@ -496,16 +614,21 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
     const dueTodaySet = new Set((data.sections.dueToday?.items ?? []).map((i) => i.id));
     const overdueDemands = data.sections.overdueDemands?.items ?? [];
 
+    const isTaskOverdue = (t: DashboardItem) =>
+      t.status !== 'completed' && (overdueSet.has(t.id) || t.deliveryDate < data.today);
+    const isTaskDueToday = (t: DashboardItem) =>
+      t.status !== 'completed' && (dueTodaySet.has(t.id) || t.deliveryDate === data.today);
+
     const myTasksCount = allTasks.filter((t) => t.assignedTo?.id === session.user.id).length;
-    const overdueCount = allTasks.filter((t) => overdueSet.has(t.id) || t.deliveryDate < data.today).length;
-    const dueTodayCount = allTasks.filter((t) => dueTodaySet.has(t.id) || t.deliveryDate === data.today).length;
-    const urgentCount = allTasks.filter((t) => t.priority === 'urgent').length;
+    const overdueCount = allTasks.filter(isTaskOverdue).length;
+    const dueTodayCount = allTasks.filter(isTaskDueToday).length;
+    const urgentCount = allTasks.filter((t) => t.status !== 'completed' && t.priority === 'urgent').length;
 
     const normalizedQuery = kanbanSearch.trim().toLowerCase();
 
     const filteredTasks = allTasks.filter((task) => {
-      const isOverdue = overdueSet.has(task.id) || task.deliveryDate < data.today;
-      const isDueToday = dueTodaySet.has(task.id) || task.deliveryDate === data.today;
+      const isOverdue = isTaskOverdue(task);
+      const isDueToday = isTaskDueToday(task);
 
       // Filtro Rápido ativo
       if (kanbanQuickFilter === 'mine' && task.assignedTo?.id !== session.user.id) {
@@ -517,7 +640,7 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
       if (kanbanQuickFilter === 'dueToday' && !isDueToday) {
         return false;
       }
-      if (kanbanQuickFilter === 'urgent' && task.priority !== 'urgent') {
+      if (kanbanQuickFilter === 'urgent' && (task.status === 'completed' || task.priority !== 'urgent')) {
         return false;
       }
 
@@ -725,72 +848,130 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
           </div>
         )}
 
-        {/* Colunas do Quadro Kanban */}
+        {/* Colunas do Quadro Kanban (Estilo Motion) */}
         <div className="kanban-board-grid">
           {kanbanColumns.map((col) => {
-            const colItems = filteredTasks.filter((t) => col.statuses.includes(t.status));
-            const colOverdueCount = colItems.filter(
-              (t) => overdueSet.has(t.id) || t.deliveryDate < data.today
-            ).length;
+            const getEffectiveCol = (t: DashboardItem): KanbanColumnKey =>
+              columnOverrides[t.id] ?? classifyKanbanColumn(t);
+
+            const colItems = filteredTasks.filter((t) => getEffectiveCol(t) === col.key);
+            const colOverdueCount = colItems.filter(isTaskOverdue).length;
+            const isDropTarget = dragOverColumn === col.key;
 
             return (
               <section
                 key={col.key}
-                className={`kanban-column ${col.accentClass}`}
+                className={`kanban-column ${col.accentClass} ${isDropTarget ? 'is-drop-target' : ''}`}
                 aria-labelledby={`kanban-col-${col.key}-title`}
+                title={col.subtitle}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  if (dragOverColumn !== col.key) {
+                    setDragOverColumn(col.key);
+                  }
+                }}
+                onDragEnter={(e) => {
+                  e.preventDefault();
+                  setDragOverColumn(col.key);
+                }}
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                    setDragOverColumn((curr) => (curr === col.key ? null : curr));
+                  }
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const droppedTaskId = e.dataTransfer.getData('text/plain') || draggingTaskId;
+                  if (!droppedTaskId) {
+                    setDragOverColumn(null);
+                    return;
+                  }
+                  const droppedTask = allTasks.find((t) => t.id === droppedTaskId);
+                  const currentCol = droppedTask ? getEffectiveCol(droppedTask) : col.key;
+                  void handleDropTask(droppedTaskId, col.key, currentCol);
+                }}
               >
                 <header className="kanban-column-header">
                   <div className="kanban-column-title-row">
                     <div className="kanban-column-title-group">
-                      <span className={`kanban-status-icon-badge ${col.accentClass}`} aria-hidden="true">
-                        {renderColumnIcon(col.iconType)}
+                      <span className={`kanban-motion-pill ${col.accentClass}`}>
+                        <span className="kanban-motion-dot" aria-hidden="true" />
+                        <h2 className="kanban-column-title" id={`kanban-col-${col.key}-title`}>
+                          {col.title}
+                        </h2>
                       </span>
-                      <h2 className="kanban-column-title" id={`kanban-col-${col.key}-title`}>
-                        {col.title}
-                      </h2>
+                      <span className={`kanban-motion-count stat-value ${col.accentClass}`}>
+                        {colItems.length}
+                      </span>
                     </div>
-                    <div className="kanban-column-header-badges">
-                      {colOverdueCount > 0 && (
+                    {colOverdueCount > 0 && (
+                      <div className="kanban-column-header-badges">
                         <span className="kanban-col-alert-tag" title={`${colOverdueCount} tarefa(s) atrasada(s)`}>
                           {colOverdueCount} atrasada{colOverdueCount > 1 ? 's' : ''}
                         </span>
-                      )}
-                      <span className={`kanban-column-count stat-value ${col.accentClass}`}>{colItems.length}</span>
-                    </div>
+                      </div>
+                    )}
                   </div>
-                  <p className="kanban-column-subtitle">{col.subtitle}</p>
                 </header>
 
                 <div className="kanban-column-body">
                   {colItems.length === 0 ? (
                     <div className="kanban-empty-slot">
-                      <div className="kanban-empty-icon" aria-hidden="true">
-                        {renderColumnIcon(col.iconType)}
-                      </div>
-                      <span className="kanban-empty-title">Nenhuma tarefa</span>
-                      <span className="kanban-empty-desc">Nenhum item nesta etapa</span>
+                      <span className="kanban-empty-title">
+                        {isDropTarget ? `Soltar em ${col.title}` : `Sem itens em ${col.title.toLowerCase()}`}
+                      </span>
+                      <span className="kanban-empty-desc">{col.subtitle}</span>
                     </div>
                   ) : (
                     <ul className="kanban-card-list">
                       {colItems.map((item) => {
-                        const isOverdue = overdueSet.has(item.id) || item.deliveryDate < data.today;
-                        const isDueToday = dueTodaySet.has(item.id) || item.deliveryDate === data.today;
-                        const rel = relativeDeadline(item.deliveryDate, data.today);
+                        const effectiveCol = getEffectiveCol(item);
+                        const isCompleted = effectiveCol === 'completed';
+                        const isOverdue = !isCompleted && isTaskOverdue(item);
+                        const isDueToday = !isCompleted && isTaskDueToday(item);
+                        const rel = !isCompleted ? relativeDeadline(item.deliveryDate, data.today) : null;
                         const isSoon = !isOverdue && !isDueToday && rel?.tone === 'soon';
-                        const dateText = isOverdue
-                          ? rel?.tone === 'overdue'
-                            ? capitalize(rel.label)
-                            : `Atrasada · ${formatDate(item.deliveryDate)}`
-                          : isDueToday
-                            ? 'Hoje'
-                            : isSoon && rel
+                        const dateText = isCompleted
+                          ? `Concluído · ${formatDate(item.deliveryDate)}`
+                          : isOverdue
+                            ? rel?.tone === 'overdue'
                               ? capitalize(rel.label)
-                              : formatDate(item.deliveryDate);
+                              : `Atrasada · ${formatDate(item.deliveryDate)}`
+                            : isDueToday
+                              ? 'Hoje'
+                              : isSoon && rel
+                                ? capitalize(rel.label)
+                                : formatDate(item.deliveryDate);
+
+                        const awaitingApproval = !isCompleted && effectiveCol === 'in_review';
+                        const showSubStatus =
+                          col.key === 'tasks' &&
+                          (item.status === 'blocked' ||
+                            item.status === 'paused' ||
+                            item.status === 'changes_requested' ||
+                            item.status === 'ready');
+                        const isDragging = draggingTaskId === item.id;
+                        const isMoving = movingTaskId === item.id;
 
                         return (
                           <li
                             key={item.id}
-                            className={`kanban-card ${isOverdue ? 'is-overdue' : ''} ${item.priority === 'urgent' ? 'is-urgent' : ''}`}
+                            draggable
+                            onDragStart={(e) => {
+                              dragSuppressClickRef.current = true;
+                              setDraggingTaskId(item.id);
+                              e.dataTransfer.effectAllowed = 'move';
+                              e.dataTransfer.setData('text/plain', item.id);
+                            }}
+                            onDragEnd={() => {
+                              setDraggingTaskId(null);
+                              setDragOverColumn(null);
+                              window.setTimeout(() => {
+                                dragSuppressClickRef.current = false;
+                              }, 120);
+                            }}
+                            className={`kanban-card ${isOverdue ? 'is-overdue' : ''} ${!isCompleted && item.priority === 'urgent' ? 'is-urgent' : ''} ${isCompleted ? 'is-completed' : ''} ${isDragging ? 'is-dragging' : ''} ${isMoving ? 'is-moving' : ''}`}
                             onClick={() => handleOpen(item)}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' || e.key === ' ') {
@@ -800,42 +981,42 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
                             }}
                             tabIndex={0}
                             role="button"
-                            aria-label={`Abrir detalhes da tarefa ${item.title}`}
+                            aria-label={`Abrir detalhes da tarefa ${item.title} (arraste para mudar de coluna)`}
                           >
-                            <div className="kanban-card-top">
-                              <div className="kanban-card-top-row">
-                                <span className="kanban-card-client" title={`Cliente: ${item.client.name}`}>
-                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                    <rect x="4" y="2" width="16" height="20" rx="2" />
-                                    <line x1="9" y1="6" x2="9" y2="6.01" />
-                                    <line x1="15" y1="6" x2="15" y2="6.01" />
-                                    <line x1="9" y1="10" x2="9" y2="10.01" />
-                                    <line x1="15" y1="10" x2="15" y2="10.01" />
-                                    <line x1="9" y1="14" x2="9" y2="14.01" />
-                                    <line x1="15" y1="14" x2="15" y2="14.01" />
-                                    <line x1="9" y1="18" x2="15" y2="18" />
-                                  </svg>
-                                  <span>{item.client.name}</span>
-                                </span>
+                            <h3 className="kanban-card-title">{item.title}</h3>
 
+                            <div className="kanban-card-tags-row">
+                              <span className="kanban-card-client" title={`Cliente: ${item.client.name}`}>
+                                {item.client.name}
+                              </span>
+
+                              {item.demandTitle && (
+                                <span className="kanban-card-demand-tag" title={`Chamado: ${item.demandTitle}`}>
+                                  {item.demandTitle}
+                                </span>
+                              )}
+
+                              {!isCompleted && item.priority !== 'normal' && (
                                 <span className={`priority-badge ${item.priority}`}>
                                   {priorityLabels[item.priority] ?? item.priority}
                                 </span>
-                              </div>
+                              )}
 
-                              {item.demandTitle && (
-                                <div className="kanban-card-sub-row">
-                                  <span className="kanban-card-demand-tag" title={`Chamado: ${item.demandTitle}`}>
-                                    #{item.demandTitle}
-                                  </span>
-                                </div>
+                              {awaitingApproval && (
+                                <span className="kanban-approval-chip" title={item.reason ?? 'Aguardando aprovação'}>
+                                  {item.status === 'in_review' ? 'Aguardando aprovação' : 'Aprovar pausa'}
+                                </span>
+                              )}
+
+                              {showSubStatus && (
+                                <span className={`kanban-substatus-chip status-${item.status}`}>
+                                  {taskStatusLabels[item.status] ?? item.status}
+                                </span>
                               )}
                             </div>
 
-                            <h3 className="kanban-card-title">{item.title}</h3>
-
                             {(() => {
-                              const wait = queueWaitFor(item, data.today);
+                              const wait = !isCompleted ? queueWaitFor(item, data.today) : null;
                               return wait ? (
                                 <span
                                   className={`queue-chip ${wait.stale ? 'stale' : ''}`}
@@ -853,10 +1034,10 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
                                 item.reason === 'Submetida para revisão (aguardando avaliação do administrador)' ||
                                 item.reason === 'Bloqueada por requisitos ou dependências pendentes' ||
                                 item.reason === 'Aguardando ação operacional';
-                              if (!item.reason || isBoilerplate) return null;
+                              if (!item.reason || isBoilerplate || isCompleted) return null;
                               return (
                                 <div className="kanban-card-reason">
-                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                     <circle cx="12" cy="12" r="10" />
                                     <line x1="12" y1="8" x2="12" y2="12" />
                                     <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -876,24 +1057,26 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
                                     <span className="assignee-name">{item.assignedTo.name.split(' ')[0]}</span>
                                   </span>
                                 ) : (
-                                  <span className="kanban-card-unassigned" title="Sem responsável atribuído">
-                                    Sem resp.
+                                  <span className="kanban-card-unassigned" title="Responsável da tarefa">
+                                    Equipe
                                   </span>
                                 )}
 
                                 <span
                                   className={`kanban-card-date-badge ${
-                                    isOverdue ? 'date-overdue' : isDueToday ? 'date-today' : isSoon ? 'date-soon' : ''
+                                    isCompleted
+                                      ? 'date-completed'
+                                      : isOverdue
+                                        ? 'date-overdue'
+                                        : isDueToday
+                                          ? 'date-today'
+                                          : isSoon
+                                            ? 'date-soon'
+                                            : ''
                                   }`}
                                   title={`Entrega: ${formatDate(item.deliveryDate)}`}
                                 >
-                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                    <circle cx="12" cy="12" r="10" />
-                                    <polyline points="12 6 12 12 16 14" />
-                                  </svg>
-                                  <span>
-                                    {dateText}
-                                  </span>
+                                  <span>{dateText}</span>
                                 </span>
                               </div>
                             </div>
@@ -925,12 +1108,25 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
           <p className="panel-subtitle">
             {data && data.scope === 'assigned'
               ? 'Visão das entregas atribuídas a você.'
-              : 'Acompanhe a produção, as pendências e a carga da equipe.'}
+              : 'Acompanhe as tarefas em aberto, em andamento, em análise e concluídas.'}
           </p>
         </div>
         <div className="dashboard-toolbar">
           {updatedAtLabel && <span className="dashboard-updated-at">{updatedAtLabel}</span>}
           <div className="dashboard-view-switcher" role="group" aria-label="Modo de visualização do Painel">
+            <button
+              type="button"
+              className={`view-switch-btn ${viewMode === 'kanban' ? 'active' : ''}`}
+              onClick={() => handleSelectViewMode('kanban')}
+              aria-pressed={viewMode === 'kanban'}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="3" y="3" width="5" height="18" rx="1" />
+                <rect x="10" y="3" width="5" height="12" rx="1" />
+                <rect x="17" y="3" width="5" height="15" rx="1" />
+              </svg>
+              <span>Kanban</span>
+            </button>
             <button
               type="button"
               className={`view-switch-btn ${viewMode === 'list' ? 'active' : ''}`}
@@ -946,19 +1142,6 @@ export function DashboardView({ session, onUnauthorized, onOpenItem }: Dashboard
                 <line x1="3" y1="18" x2="3.01" y2="18" />
               </svg>
               <span>Lista</span>
-            </button>
-            <button
-              type="button"
-              className={`view-switch-btn ${viewMode === 'kanban' ? 'active' : ''}`}
-              onClick={() => handleSelectViewMode('kanban')}
-              aria-pressed={viewMode === 'kanban'}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <rect x="3" y="3" width="5" height="18" rx="1" />
-                <rect x="10" y="3" width="5" height="12" rx="1" />
-                <rect x="17" y="3" width="5" height="15" rx="1" />
-              </svg>
-              <span>Kanban</span>
             </button>
           </div>
           <button

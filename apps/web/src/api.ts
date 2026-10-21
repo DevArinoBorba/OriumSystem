@@ -547,6 +547,19 @@ export const api = {
       (raw) => taskResponseSchema.parse(raw),
     ),
 
+  moveTaskKanban: (
+    id: string,
+    input: { column: 'tasks' | 'in_production' | 'in_review' | 'completed' },
+    signal: AbortSignal,
+    onUnauthorized: () => void,
+  ): Promise<{ task: Task }> =>
+    request(
+      `/api/v1/tasks/${id}/kanban-move`,
+      { method: 'POST', body: JSON.stringify(input), signal },
+      onUnauthorized,
+      (raw) => taskResponseSchema.parse(raw),
+    ),
+
   requestTaskPause: (
     id: string,
     input: RequestTaskPauseInput,

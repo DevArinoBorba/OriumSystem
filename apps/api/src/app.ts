@@ -131,6 +131,7 @@ import {
   removeDependency,
   listTaskComments,
   createTaskComment,
+  moveTaskKanban,
 } from './demands.js';
 import { getDashboard } from './dashboard.js';
 import {
@@ -610,6 +611,16 @@ export async function buildApp({ config, database, logger, driveGateway }: Optio
     const params = z.object({ id: z.string().uuid() }).parse(request.params);
     const input = reviewTaskSchema.parse(request.body);
     return reviewTask(database, identity, params.id, input);
+  });
+
+  app.post('/api/v1/tasks/:id/kanban-move', async (request) => {
+    const identity = await authenticate(database, auth, request.headers);
+    requirePermission(identity, 'tasks.execute');
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    const input = z.object({
+      column: z.enum(['tasks', 'in_production', 'in_review', 'completed']),
+    }).strict().parse(request.body);
+    return moveTaskKanban(database, identity, params.id, input);
   });
 
   app.post('/api/v1/tasks/:id/request-pause', async (request) => {
